@@ -46,11 +46,11 @@ fn main() -> Result<()> {
     init_tracing(cli.verbose);
 
     match cli.command {
-        Command::Find(a)   => commands::find::run(a),
-        Command::Bind(a)   => commands::bind::run(a),
-        Command::Guard(a)  => commands::guard::run(a),
+        Command::Find(a) => commands::find::run(a),
+        Command::Bind(a) => commands::bind::run(a),
+        Command::Guard(a) => commands::guard::run(a),
         Command::Report(a) => commands::report::run(a),
-        Command::Doctor    => commands::doctor::run(),
+        Command::Doctor => commands::doctor::run(),
     }
 }
 
@@ -61,6 +61,10 @@ fn init_tracing(v: u8) {
         2 => "debug",
         _ => "trace",
     };
-    let filter = EnvFilter::try_from_env("CAPFRAME_LOG").unwrap_or_else(|_| EnvFilter::new(default));
-    tracing_subscriber::fmt().with_env_filter(filter).with_target(false).init();
+    let filter =
+        EnvFilter::try_from_env("CAPFRAME_LOG").unwrap_or_else(|_| EnvFilter::new(default));
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .init();
 }

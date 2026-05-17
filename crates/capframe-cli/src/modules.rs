@@ -15,16 +15,16 @@ impl Module {
     /// the modules are folded into the workspace.
     pub fn underlying_binary(self) -> &'static str {
         match self {
-            Module::Find  => "mcp-recon",
-            Module::Bind  => "capnagent",
+            Module::Find => "mcp-recon",
+            Module::Bind => "capnagent",
             Module::Guard => "mcp-guard",
         }
     }
 
     pub fn install_hint(self) -> &'static str {
         match self {
-            Module::Find  => "https://github.com/euanmcrosson-dotcom/mcp-recon",
-            Module::Bind  => "https://github.com/euanmcrosson-dotcom/capnagent",
+            Module::Find => "https://github.com/euanmcrosson-dotcom/mcp-recon",
+            Module::Bind => "https://github.com/euanmcrosson-dotcom/capnagent",
             Module::Guard => "https://github.com/euanmcrosson-dotcom/mcp-guard",
         }
     }

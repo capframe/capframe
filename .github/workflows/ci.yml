@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --all-features
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}
+      - run: cargo test --workspace --all-targets
+
+  schema:
+    name: schema + scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JSON files parse
+        run: |
+          for f in schemas/*.json; do
+            echo "  validating $f"
+            python3 -c "import json,sys; json.load(open('$f'))"
+          done
+
+      - name: schema example matches schema
+        run: |
+          pip install --quiet jsonschema
+          python3 -c "
+          import json
+          from jsonschema import Draft202012Validator
+          schema  = json.load(open('schemas/findings.v1.json'))
+          example = json.load(open('schemas/findings.example.json'))
+          Draft202012Validator(schema).validate(example)
+          print('  findings.example.json conforms to findings.v1.json')
+          "
+
+      - name: shellcheck install.sh
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          ignore_paths: 'target'
