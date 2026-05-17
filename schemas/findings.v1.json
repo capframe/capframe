@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://capframe.ai/schemas/findings.v1.json",
+  "title": "Capframe Findings v1",
+  "description": "Shared findings format produced by capframe-find and consumed by capframe-bind, capframe-guard, and capframe-report.",
+  "type": "object",
+  "required": ["schema_version", "scanned_at", "scanner", "target", "tools", "findings", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "capframe.findings.v1" },
+    "scanned_at":     { "type": "string", "format": "date-time" },
+    "scan_id":        { "type": "string", "format": "uuid" },
+
+    "scanner": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name":    { "type": "string", "examples": ["capframe-find", "mcp-recon"] },
+        "version": { "type": "string", "examples": ["0.1.0"] }
+      }
+    },
+
+    "target": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/TargetKind" },
+        "name": { "type": "string" },
+        "url":  { "type": "string", "format": "uri" },
+        "path": { "type": "string" },
+        "transport": { "type": "string", "enum": ["stdio", "http", "sse", "websocket"] }
+      }
+    },
+
+    "tools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Tool" }
+    },
+
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Finding" }
+    },
+
+    "summary": {
+      "type": "object",
+      "required": ["total", "by_severity"],
+      "additionalProperties": false,
+      "properties": {
+        "total":        { "type": "integer", "minimum": 0 },
+        "by_severity":  { "$ref": "#/$defs/SeverityCounts" },
+        "by_category":  {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "mappings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "owasp_llm":   { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "nist_rmf":    { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "mitre_atlas": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+          }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "Severity": {
+      "type": "string",
+      "enum": ["info", "low", "medium", "high", "critical"]
+    },
+
+    "SeverityCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "info":     { "type": "integer", "minimum": 0, "default": 0 },
+        "low":      { "type": "integer", "minimum": 0, "default": 0 },
+        "medium":   { "type": "integer", "minimum": 0, "default": 0 },
+        "high":     { "type": "integer", "minimum": 0, "default": 0 },
+        "critical": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+
+    "TargetKind": {
+      "type": "string",
+      "enum": [
+        "mcp_server",
+        "openai_function",
+        "anthropic_tool",
+        "langgraph_node",
+        "custom"
+      ]
+    },
+
+    "Category": {
+      "type": "string",
+      "description": "Class of finding. Stable across scanner implementations.",
+      "enum": [
+        "indirect_injection",
+        "excessive_agency",
+        "unconstrained_input",
+        "missing_authz",
+        "insecure_output_handling",
+        "secret_exposure",
+        "tool_naming_conflict",
+        "deserialization",
+        "ssrf_surface",
+        "filesystem_egress",
+        "network_egress",
+        "untrusted_dependency",
+        "other"
+      ]
+    },
+
+    "Tool": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name":        { "type": "string" },
+        "description": { "type": "string" },
+        "parameters":  { "type": "object" },
+        "side_effects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["read", "write", "network", "filesystem", "execute", "money", "irreversible"]
+          },
+          "uniqueItems": true
+        },
+        "auth_required":  { "type": "boolean" },
+        "rate_limited":   { "type": "boolean" }
+      }
+    },
+
+    "Finding": {
+      "type": "object",
+      "required": ["id", "severity", "category", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id":          { "type": "string", "description": "stable hash, suitable for diffing across scans" },
+        "severity":    { "$ref": "#/$defs/Severity" },
+        "category":    { "$ref": "#/$defs/Category" },
+        "title":       { "type": "string", "maxLength": 200 },
+        "description": { "type": "string" },
+        "tool":        { "type": "string", "description": "name of the tool this finding relates to, if any" },
+        "evidence":    { "type": "object", "description": "scanner-specific structured evidence" },
+        "remediation": { "type": "string" },
+        "mappings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "owasp_llm":   { "type": "array", "items": { "type": "string", "pattern": "^LLM(0[1-9]|10)$" }, "uniqueItems": true },
+            "nist_rmf":    { "type": "array", "items": { "type": "string", "pattern": "^(GOVERN|MAP|MEASURE|MANAGE)-[0-9]+(\\.[0-9]+)*$" }, "uniqueItems": true },
+            "mitre_atlas": { "type": "array", "items": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" }, "uniqueItems": true }
+          }
+        },
+        "first_seen":  { "type": "string", "format": "date-time" },
+        "last_seen":   { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

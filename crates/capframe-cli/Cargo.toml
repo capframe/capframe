@@ -1,0 +1,23 @@
+[package]
+name        = "capframe-cli"
+description = "Capframe — capability-based security for AI agents (CLI)"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+
+[[bin]]
+name = "capframe"
+path = "src/main.rs"
+
+[dependencies]
+anyhow             = { workspace = true }
+clap               = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
+which              = { workspace = true }
+capframe-findings  = { workspace = true }

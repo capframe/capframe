@@ -1,0 +1,41 @@
+{
+  "schema_version": "capframe.findings.v1",
+  "scanned_at": "2026-05-17T14:32:00Z",
+  "scan_id": "0c81b6d2-7a91-4c52-9c1e-aa8e90e3f6b1",
+  "scanner": { "name": "capframe-find", "version": "0.1.0" },
+  "target":  { "kind": "mcp_server", "name": "shopify-mcp", "transport": "stdio" },
+  "tools": [
+    {
+      "name": "order.refund",
+      "description": "Issue a refund on an order",
+      "side_effects": ["write", "money", "irreversible"],
+      "auth_required": true
+    }
+  ],
+  "findings": [
+    {
+      "id": "f-order-refund-unbounded",
+      "severity": "high",
+      "category": "excessive_agency",
+      "title": "order.refund has no monetary cap",
+      "description": "The order.refund tool accepts arbitrary amount values with no policy-side cap. An indirect-injection attack could trigger large refunds.",
+      "tool": "order.refund",
+      "remediation": "Bind a capability token with --max-refund, or add a Guard rule capping the amount parameter.",
+      "mappings": {
+        "owasp_llm":   ["LLM08"],
+        "nist_rmf":    ["MANAGE-2.2"],
+        "mitre_atlas": ["T0051"]
+      }
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "by_severity": { "info": 0, "low": 0, "medium": 0, "high": 1, "critical": 0 },
+    "by_category": { "excessive_agency": 1 },
+    "mappings": {
+      "owasp_llm":   ["LLM08"],
+      "nist_rmf":    ["MANAGE-2.2"],
+      "mitre_atlas": ["T0051"]
+    }
+  }
+}
