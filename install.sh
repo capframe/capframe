@@ -103,8 +103,11 @@ main() {
 
     bin_dir="$INSTALL_DIR/bin"
     mkdir -p "$bin_dir"
-    tar -xzf "$tmpdir/$tarball" -C "$tmpdir"
-    mv "$tmpdir/capframe" "$bin_dir/capframe"
+    # Release archive contains a single top-level dir capframe-<ver>-<target>/
+    # containing the binary; --strip-components=1 flattens it on extract.
+    mkdir -p "$tmpdir/extract"
+    tar -xzf "$tmpdir/$tarball" -C "$tmpdir/extract" --strip-components=1
+    mv "$tmpdir/extract/capframe" "$bin_dir/capframe"
     chmod +x "$bin_dir/capframe"
 
     info "installed to ${BOLD}$bin_dir/capframe${RESET}"

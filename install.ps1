@@ -39,8 +39,12 @@ try {
 
     $binDir = Join-Path $Install 'bin'
     New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+    # Release archive contains capframe-<ver>-<target>/capframe.exe;
+    # extract then locate the .exe regardless of folder name.
     Expand-Archive -Path (Join-Path $tmp $zip) -DestinationPath $tmp -Force
-    Move-Item -Force (Join-Path $tmp 'capframe.exe') (Join-Path $binDir 'capframe.exe')
+    $found = Get-ChildItem -Path $tmp -Recurse -Filter 'capframe.exe' | Select-Object -First 1
+    if (-not $found) { Die "capframe.exe not found inside $zip" }
+    Move-Item -Force $found.FullName (Join-Path $binDir 'capframe.exe')
     Info "installed to $binDir\capframe.exe"
 
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
