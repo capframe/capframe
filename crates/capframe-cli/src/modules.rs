@@ -63,8 +63,8 @@ pub fn resolve_compatible(m: Module) -> Result<PathBuf> {
     let bin = resolve(m)?;
     let req = semver::VersionReq::parse(m.version_req())
         .with_context(|| format!("parse version_req for {}", m.underlying_binary()))?;
-    let v = binary_version(&bin)
-        .with_context(|| format!("read --version from {}", bin.display()))?;
+    let v =
+        binary_version(&bin).with_context(|| format!("read --version from {}", bin.display()))?;
     if !req.matches(&v) {
         bail!(
             "module `{}` is version {} but capframe requires {}.\n\

@@ -27,15 +27,13 @@ fn assert_valid(s: &JSONSchema, doc: &serde_json::Value, context: &str) {
 #[test]
 fn example_payload_validates() {
     let s = schema();
-    let example: serde_json::Value =
-        serde_json::from_str(EXAMPLE).expect("example is valid json");
+    let example: serde_json::Value = serde_json::from_str(EXAMPLE).expect("example is valid json");
     assert_valid(&s, &example, "schemas/findings.example.json");
 }
 
 #[test]
 fn rust_serialization_validates() {
-    let parsed: Findings =
-        serde_json::from_str(EXAMPLE).expect("parse example into Rust types");
+    let parsed: Findings = serde_json::from_str(EXAMPLE).expect("parse example into Rust types");
     let reserialized = serde_json::to_value(&parsed).expect("reserialize Rust types");
     assert_valid(&schema(), &reserialized, "Rust-roundtripped example");
 }
@@ -72,8 +70,7 @@ fn minimal_synthetic_findings_validates() {
 
 #[test]
 fn schema_rejects_unknown_severity() {
-    let mut example: serde_json::Value =
-        serde_json::from_str(EXAMPLE).expect("parse example");
+    let mut example: serde_json::Value = serde_json::from_str(EXAMPLE).expect("parse example");
     example["findings"][0]["severity"] = serde_json::Value::String("apocalyptic".into());
     let s = schema();
     assert!(
@@ -84,8 +81,7 @@ fn schema_rejects_unknown_severity() {
 
 #[test]
 fn schema_rejects_malformed_owasp_id() {
-    let mut example: serde_json::Value =
-        serde_json::from_str(EXAMPLE).expect("parse example");
+    let mut example: serde_json::Value = serde_json::from_str(EXAMPLE).expect("parse example");
     example["findings"][0]["mappings"]["owasp_llm"] =
         serde_json::Value::Array(vec![serde_json::Value::String("LLM99".into())]);
     let s = schema();

@@ -138,6 +138,79 @@ fn bind_passes_limits_through_to_module() {
 }
 
 #[test]
+fn guard_backtest_dispatches_to_mcp_guard_backtest() {
+    let dir = tempfile::tempdir().unwrap();
+    let argv_log = dir.path().join("argv.txt");
+    let _mock = write_mock_module(dir.path(), "mcp-guard", "mcp-guard 0.5.5", &argv_log);
+
+    capframe()
+        .env("PATH", dir.path())
+        .args(["guard", "backtest", "/tmp/policy.yaml"])
+        .assert()
+        .success();
+
+    let argv = fs::read_to_string(&argv_log).expect("mock wrote argv");
+    assert!(argv.contains("backtest"), "got: {argv}");
+    assert!(argv.contains("policy.yaml"), "got: {argv}");
+    // Must NOT pass the old --policy / --addr flag shape:
+    assert!(
+        !argv.contains("--policy"),
+        "old --policy flag leaked: {argv}"
+    );
+    assert!(!argv.contains("--addr"), "old --addr flag leaked: {argv}");
+}
+
+#[test]
+fn guard_synthesize_dispatches_to_mcp_guard_synthesize() {
+    let dir = tempfile::tempdir().unwrap();
+    let argv_log = dir.path().join("argv.txt");
+    let _mock = write_mock_module(dir.path(), "mcp-guard", "mcp-guard 0.5.5", &argv_log);
+
+    capframe()
+        .env("PATH", dir.path())
+        .args([
+            "guard",
+            "synthesize",
+            "the tool deleted my prod db",
+            "--technique-id",
+            "T0051",
+        ])
+        .assert()
+        .success();
+
+    let argv = fs::read_to_string(&argv_log).expect("mock wrote argv");
+    assert!(argv.contains("synthesize"), "got: {argv}");
+    assert!(argv.contains("deleted my prod db"), "got: {argv}");
+    assert!(argv.contains("--technique-id"), "got: {argv}");
+    assert!(argv.contains("T0051"), "got: {argv}");
+}
+
+#[test]
+fn guard_evaluate_dispatches_three_positional_args() {
+    let dir = tempfile::tempdir().unwrap();
+    let argv_log = dir.path().join("argv.txt");
+    let _mock = write_mock_module(dir.path(), "mcp-guard", "mcp-guard 0.5.5", &argv_log);
+
+    capframe()
+        .env("PATH", dir.path())
+        .args([
+            "guard",
+            "evaluate",
+            "/tmp/policy.yaml",
+            "order.refund",
+            "{\"amount\":50}",
+        ])
+        .assert()
+        .success();
+
+    let argv = fs::read_to_string(&argv_log).expect("mock wrote argv");
+    assert!(argv.contains("evaluate"), "got: {argv}");
+    assert!(argv.contains("policy.yaml"), "got: {argv}");
+    assert!(argv.contains("order.refund"), "got: {argv}");
+    assert!(argv.contains("amount"), "got: {argv}");
+}
+
+#[test]
 fn dispatch_rejects_incompatible_version() {
     let dir = tempfile::tempdir().unwrap();
     let argv_log = dir.path().join("argv.txt");
@@ -150,7 +223,6 @@ fn dispatch_rejects_incompatible_version() {
         .assert()
         .failure()
         .stderr(
-            predicate::str::contains("requires")
-                .or(predicate::str::contains("capframe install")),
+            predicate::str::contains("requires").or(predicate::str::contains("capframe install")),
         );
 }

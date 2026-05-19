@@ -288,7 +288,11 @@ fn sha256_file(p: &Path) -> Result<String> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
 }
 
 fn extract(archive: &Path, into: &Path, _ext: &str) -> Result<()> {

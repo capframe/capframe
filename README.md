@@ -74,8 +74,10 @@ capframe bind \
   --limit region=eu \
   --ttl 24h
 
-# 3. Run the runtime sentry
-capframe guard --policy ./policy.toml --addr 127.0.0.1:8783
+# 3. Synthesize / backtest / evaluate policies via mcp-guard
+capframe guard synthesize "the agent issued a refund larger than the cap"
+capframe guard backtest ./policy.yaml
+capframe guard evaluate ./policy.yaml order.refund '{"amount": 50}'
 
 # 4. Produce an audit-ready compliance report
 capframe report --findings capframe.findings.json --format html --out report.html
