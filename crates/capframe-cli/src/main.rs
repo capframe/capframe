@@ -39,6 +39,9 @@ enum Command {
 
     /// Show installed module versions and where each binary resolves from
     Doctor,
+
+    /// Download + sha256-verify the three module binaries into ~/.capframe/bin
+    Install(commands::install::Args),
 }
 
 fn main() -> Result<()> {
@@ -51,6 +54,7 @@ fn main() -> Result<()> {
         Command::Guard(a) => commands::guard::run(a),
         Command::Report(a) => commands::report::run(a),
         Command::Doctor => commands::doctor::run(),
+        Command::Install(a) => commands::install::run(a),
     }
 }
 

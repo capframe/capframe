@@ -20,43 +20,71 @@ Capframe is a three-module security platform for AI agents that call tools — t
 
 It treats every tool call as a capability check:
 
-1. **Discover** the tool surface and find injection gaps.
-2. **Mint** scoped, revocable capability tokens.
-3. **Enforce** policy at runtime, on every call.
+1. **Find** the tool surface and the injection gaps in it.
+2. **Bind** the agent's authority with scoped, revocable capability tokens.
+3. **Guard** every call at runtime — deterministic policy, no LLM in the decision path.
 
-Each module ships as its own crate and CLI subcommand. Use them standalone, or together as a platform.
+The `capframe` binary is a single dispatcher CLI. The three modules ship from their own repos and are resolved at runtime from `PATH`:
 
-## The three modules
+| Module | Subcommand | Source repo | Distribution |
+|---|---|---|---|
+| **Find** | `capframe find` | [mcp-recon](https://github.com/euanmcrosson-dotcom/mcp-recon) | GitHub Releases (native binary) |
+| **Bind** | `capframe bind` | [capnagent](https://github.com/euanmcrosson-dotcom/capnagent) | GitHub Releases + PyPI |
+| **Guard** | `capframe guard` | [mcp-guard](https://github.com/euanmcrosson-dotcom/mcp-guard) | GitHub Releases + PyPI (`mcp-guardrails`) |
+| **Report** | `capframe report` | (this repo) | shipped with capframe |
 
-| Module    | Subcommand        | Source repo                                                       | Status |
-| --------- | ----------------- | ----------------------------------------------------------------- | ------ |
-| **Find**  | `capframe find`   | [mcp-recon](https://github.com/euanmcrosson-dotcom/mcp-recon)     | Beta   |
-| **Bind**  | `capframe bind`   | [capnagent](https://github.com/euanmcrosson-dotcom/capnagent)     | Beta   |
-| **Guard** | `capframe guard`  | [mcp-guard](https://github.com/euanmcrosson-dotcom/mcp-guard)     | Beta   |
-| **Report**| `capframe report` | (this repo)                                                       | Alpha  |
+Each module is independently usable. Capframe gives them a shared CLI, a shared findings format ([`findings.v1`](schemas/findings.v1.json)), and a unified audit report.
+
+## Install
+
+```bash
+# Install the dispatcher CLI
+curl -fsSL https://capframe.ai/install | sh                # Linux / macOS
+iwr -useb https://capframe.ai/install.ps1 | iex            # Windows PowerShell
+
+# Then pull the three modules with sha256-verified binaries
+capframe install                                            # all three
+capframe install find bind guard                            # explicit
+capframe install bind --version v0.7.4                      # pin one
+```
+
+`capframe install` downloads each module's release archive from its GitHub repo, verifies the `.sha256` sidecar, extracts the binary into `~/.capframe/bin`, and records the pinned version in `~/.capframe/state.json`. Add `~/.capframe/bin` to your `PATH`.
+
+If you'd rather install via Python: `pip install capnagent mcp-guardrails` covers Bind and Guard.
+
+Verify everything is wired:
+
+```bash
+capframe doctor
+```
+
+`doctor` resolves each module's binary, runs `--version`, and confirms it satisfies capframe's compatibility band (see [version policy](#version-policy)).
 
 ## Quick start
 
 ```bash
-# Install the CLI
-curl -fsSL https://capframe.ai/install | sh
-
 # 1. Map your agent's tool surface
 capframe find ./my-mcp-server.toml
 
-# 2. Mint a scoped capability token for your agent
+# 2. Mint a scoped capability token
 capframe bind \
   --agent shopify-bot \
   --tools "order.read, refund.write" \
-  --max-refund 50.00 \
+  --limit max_refund=50.00 \
+  --limit region=eu \
   --ttl 24h
 
 # 3. Run the runtime sentry
 capframe guard --policy ./policy.toml --addr 127.0.0.1:8783
 
 # 4. Produce an audit-ready compliance report
-capframe report --findings ./capframe.findings.json --format html --out ./report.html
+capframe report --findings capframe.findings.json --format html --out report.html
+capframe report --findings capframe.findings.json --format pdf  --out report.pdf
 ```
+
+`--format pdf` requires `weasyprint` or a Chromium/Chrome binary on `PATH`. Capframe auto-detects whichever is present; override with `--pdf-tool weasyprint|chromium|chrome`.
+
+`--limit` is repeatable. It replaces the old `--max-refund` flag with a generic constraint passthrough. Keys must match `[A-Za-z0-9_.]+`. The dispatcher forwards each one as `--limit key=value` to the underlying bind module.
 
 ## How the pieces fit
 
@@ -82,54 +110,78 @@ capframe report --findings ./capframe.findings.json --format html --out ./report
                           audit artifact
 ```
 
-1. **Find** scans MCP servers and writes a structured findings file.
+1. **Find** scans MCP servers and emits a `findings.v1.json` document.
 2. **Bind** issues ed25519 holder-of-key capability tokens scoped to what each agent actually needs.
-3. **Guard** evaluates every tool call against the token and policies synthesized from Find's findings — before the call hits the tool.
-4. **Report** rolls findings + token grants + Guard logs into an audit-ready document.
+3. **Guard** evaluates every tool call against the token + a policy synthesized from Find's output — deterministic, single-digit microsecond decisions.
+4. **Report** rolls findings (and, on the roadmap, token grants + Guard logs) into an HTML / PDF audit document.
 
 ## Compliance mapping
 
-Every run produces evidence mapped to:
+Each finding carries identifiers from:
 
-- **OWASP LLM Top 10** — particularly LLM01 (prompt injection), LLM02 (insecure output), LLM07 (insecure plugin design), LLM08 (excessive agency)
-- **NIST AI RMF** — Govern / Map / Measure / Manage
-- **MITRE ATLAS** — applicable tactics and techniques per finding
+- **OWASP LLM Top 10** — `LLM01` … `LLM10`
+- **NIST AI RMF** — `GOVERN-*` / `MAP-*` / `MEASURE-*` / `MANAGE-*`
+- **MITRE ATLAS** — `T####` and `T####.###`
 
-Run `capframe report` after any scan or Guard session to produce HTML or PDF output.
+The JSON Schema validates these patterns at the wire level; the example payload in `schemas/findings.example.json` is exercised in CI.
 
 ## Architecture
-
-Capframe is a Rust workspace:
 
 ```
 capframe/
 ├── crates/
-│   ├── capframe-cli/        # the dispatcher binary
-│   └── capframe-findings/   # shared findings schema (Rust types)
+│   ├── capframe-cli/        # dispatcher binary, install, doctor, report
+│   └── capframe-findings/   # findings.v1 shared schema (Rust types + tests)
 ├── schemas/
-│   └── findings.v1.json     # the canonical JSON Schema
-└── docs/
+│   └── findings.v1.json     # canonical JSON Schema (Draft 2020-12)
+└── .github/workflows/       # CI + tagged-release builds for 6 targets
 ```
 
 **Design principles**
 
-- **Local-first.** The CLI runs entirely on your machine. No data leaves your environment unless you opt into the hosted control plane.
+- **Local-first.** The CLI runs entirely on your machine. No telemetry. No data leaves your environment unless you opt into the hosted control plane.
 - **Deterministic.** Guard's policy evaluation is deterministic and auditable — no LLM in the decision path.
 - **Composable.** Use Find without Bind. Use Guard without Find. The modules don't require each other.
-- **Rust-native.** Single binary, no runtime, easy to deploy.
+- **Rust-native dispatcher.** Single binary, no runtime, easy to deploy. The underlying Find/Bind modules ship as native Rust binaries; Guard ships as a PyInstaller-bundled native binary.
+
+## Version policy
+
+Capframe pins each module to a semver range it has verified wire-compatibility with. On every dispatch, capframe runs `<module> --version`, parses the output, and refuses to invoke an incompatible binary. Mismatches print a `capframe install <module>` hint.
+
+| Module | Required range | Pinned via |
+|---|---|---|
+| mcp-recon (Find)  | `>=0.0.1, <0.1.0` | `modules.rs::Module::version_req` |
+| capnagent (Bind)  | `>=0.7.0, <0.8.0` | `modules.rs::Module::version_req` |
+| mcp-guard (Guard) | `>=0.5.0, <0.6.0` | `modules.rs::Module::version_req` |
+
+Bump these in lockstep with breaking CLI changes in the underlying modules.
 
 ## Project status
 
-Capframe is pre-1.0. The three modules are independently usable in beta today; the dispatcher CLI and unified report generator are under active development.
+Capframe is pre-1.0. The three modules are independently usable today; the dispatcher CLI, sha256-verified installer, version-pinning gate, and HTML/PDF report generator landed at v0.2.
 
-Roadmap highlights:
+Roadmap:
 
-- [ ] `capframe report` v1 (HTML + PDF, signed)
+- [x] `capframe install` with sha256 verification + version pinning
+- [x] `capframe report` HTML (maud-templated) + PDF (weasyprint/chromium dispatch)
+- [x] JSON-Schema-conformance test suite for `findings.v1`
+- [ ] In-process module dispatch (drop the subprocess hop for find/bind)
+- [ ] Native PDF rendering without external tool
 - [ ] OpenAI function-calling adapter
 - [ ] Anthropic tool-use adapter
 - [ ] LangGraph integration
 - [ ] Hosted control plane (private alpha)
 - [ ] SOC 2 Type I for hosted offering
+
+## Development
+
+```bash
+cargo test --workspace          # 17 tests (CLI dispatch, schema conformance, unit)
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+The CI workflow (`.github/workflows/ci.yml`) runs all of the above on Linux, macOS, and Windows, plus a Python-driven schema validator against `schemas/findings.example.json`.
 
 ## Community
 

@@ -127,7 +127,7 @@ main() {
     ${BOLD}capframe guard --help${RESET}     run the runtime sentry
 
   Docs:    https://capframe.ai/docs
-  Discord: https://capframe.ai/discord
+  Source:  https://capframe.ai/github
 
 EOF
 }

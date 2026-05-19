@@ -15,9 +15,20 @@ path = "src/main.rs"
 [dependencies]
 anyhow             = { workspace = true }
 clap               = { workspace = true }
+dirs               = { workspace = true }
+maud               = { workspace = true }
+semver             = { workspace = true }
 serde              = { workspace = true }
 serde_json         = { workspace = true }
+sha2               = { workspace = true }
+time               = { workspace = true }
 tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
+ureq               = { workspace = true }
 which              = { workspace = true }
 capframe-findings  = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+tempfile   = { workspace = true }

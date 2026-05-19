@@ -6,7 +6,7 @@ members = [
 ]
 
 [workspace.package]
-version      = "0.1.0"
+version      = "0.2.0"
 edition      = "2021"
 rust-version = "1.78"
 license      = "MIT"
@@ -17,13 +17,24 @@ authors      = ["Capframe Contributors"]
 [workspace.dependencies]
 anyhow             = "1.0"
 clap               = { version = "4.5", features = ["derive", "env"] }
+dirs               = "5.0"
+maud               = "0.26"
+semver             = "1.0"
 serde              = { version = "1.0", features = ["derive"] }
 serde_json         = "1.0"
+sha2               = "0.10"
 thiserror          = "1.0"
 time               = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ureq               = { version = "2.10", default-features = false, features = ["tls", "json"] }
 which              = "6.0"
+
+# dev-only
+assert_cmd = "2.0"
+jsonschema = { version = "0.18", default-features = false, features = ["draft202012"] }
+predicates = "3.1"
+tempfile   = "3.10"
 
 capframe-findings = { path = "crates/capframe-findings" }
 
