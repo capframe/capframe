@@ -28,6 +28,14 @@ ureq               = { workspace = true }
 which              = { workspace = true }
 capframe-findings  = { workspace = true }
 
+# In-process dispatch for `capframe find` — calls the classifier as a
+# library instead of shelling out to the `mcp-recon` binary. Path dep so
+# local checkouts compose; CI / release builds should switch this to a
+# git dep pinned to the matching mcp-recon tag (or a crates.io version
+# once mcp-recon-core is published). The `--external` flag still routes
+# through the on-PATH binary if the user needs a different version.
+mcp-recon-core     = { path = "../../../mcp-recon/crates/mcp-recon-core" }
+
 [dev-dependencies]
 assert_cmd = { workspace = true }
 predicates = { workspace = true }

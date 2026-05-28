@@ -211,7 +211,11 @@ fn guard_evaluate_dispatches_three_positional_args() {
 }
 
 #[test]
-fn dispatch_rejects_incompatible_version() {
+fn dispatch_rejects_incompatible_version_via_external_flag() {
+    // With in-process dispatch as the default, the version-check path only
+    // fires when the user explicitly asks for the external binary. The
+    // contract is preserved: if you opt into `--external`, the on-PATH
+    // binary's version_req still gates the call.
     let dir = tempfile::tempdir().unwrap();
     let argv_log = dir.path().join("argv.txt");
     // mcp-recon's version_req is >=0.0.1, <0.1.0 — 9.9.9 must be rejected.
@@ -219,10 +223,99 @@ fn dispatch_rejects_incompatible_version() {
 
     capframe()
         .env("PATH", dir.path())
-        .args(["find", "./does-not-matter.toml"])
+        .args(["find", "--external", "./does-not-matter.toml"])
         .assert()
         .failure()
         .stderr(
             predicate::str::contains("requires").or(predicate::str::contains("capframe install")),
         );
+}
+
+#[test]
+fn find_runs_in_process_against_a_real_inventory() {
+    // No on-PATH mcp-recon — the in-process path must classify the inventory
+    // and emit a valid capframe.findings.v1 envelope without touching the
+    // subprocess fallback at all.
+    let dir = tempfile::tempdir().unwrap();
+    let inventory = dir.path().join("inventory.json");
+    let findings_out = dir.path().join("findings.json");
+
+    let inv = serde_json::json!({
+        "schema": "mcp-recon.inventory.v1",
+        "servers": [{
+            "name": "test",
+            "tools": [
+                { "name": "execute_shell",
+                  "description": "Execute a shell command.",
+                  "parameters": { "type": "object", "properties": {
+                      "cmd": { "type": "string", "maxLength": 4096 }
+                  }},
+                  "side_effects": [],
+                  "auth_required": true },
+                { "name": "list_users",
+                  "description": "List users.",
+                  "side_effects": ["read"],
+                  "auth_required": true }
+            ]
+        }]
+    });
+    fs::write(&inventory, serde_json::to_string(&inv).unwrap()).unwrap();
+
+    capframe()
+        // Empty PATH — proves no subprocess fallback was used.
+        .env("PATH", "")
+        .args([
+            "find",
+            inventory.to_string_lossy().as_ref(),
+            "--out",
+            findings_out.to_string_lossy().as_ref(),
+            "--format",
+            "pretty",
+        ])
+        .assert()
+        .success();
+
+    let body = fs::read_to_string(&findings_out).expect("findings file written");
+    let v: serde_json::Value = serde_json::from_str(&body).expect("findings JSON");
+    assert_eq!(v["schema_version"], "capframe.findings.v1");
+    assert_eq!(v["scanner"]["name"], "mcp-recon");
+    // R7 should fire on execute_shell.
+    let ids: Vec<&str> = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["id"].as_str().unwrap())
+        .collect();
+    assert!(
+        ids.iter().any(|id| id.contains("r7") && id.contains("execute_shell")),
+        "R7 should fire on execute_shell; got {ids:?}"
+    );
+    assert_eq!(v["summary"]["by_severity"]["critical"], 1);
+}
+
+#[test]
+fn find_external_flag_actually_dispatches_to_on_path_binary() {
+    // With --external the on-PATH binary IS invoked; argv should reach it.
+    let dir = tempfile::tempdir().unwrap();
+    let argv_log = dir.path().join("argv.txt");
+    let _mock = write_mock_module(dir.path(), "mcp-recon", "mcp-recon 0.0.12", &argv_log);
+
+    let inventory = dir.path().join("inventory.json");
+    fs::write(&inventory, r#"{"schema":"mcp-recon.inventory.v1","servers":[]}"#).unwrap();
+
+    capframe()
+        .env("PATH", dir.path())
+        .args([
+            "find",
+            "--external",
+            inventory.to_string_lossy().as_ref(),
+            "--out",
+            dir.path().join("findings.json").to_string_lossy().as_ref(),
+        ])
+        .assert()
+        .success();
+
+    let argv = fs::read_to_string(&argv_log).expect("mock wrote argv");
+    assert!(argv.contains("--target"), "got: {argv}");
+    assert!(argv.contains("--out"), "got: {argv}");
 }
