@@ -25,10 +25,10 @@ use time::OffsetDateTime;
 use crate::modules::{dispatch, Module};
 
 /// Version of `mcp-recon-core` we compile against. Keep in lockstep with
-/// the `path`/`git`/`version` value in this crate's Cargo.toml. Used as
-/// `scanner.version` in the emitted envelope so consumers can see exactly
-/// which classifier did the work.
-const MCP_RECON_CORE_VERSION: &str = "0.0.12";
+/// the `tag` value in this crate's Cargo.toml. Used as `scanner.version`
+/// in the emitted envelope so consumers can see exactly which classifier
+/// did the work.
+const MCP_RECON_CORE_VERSION: &str = "0.0.13";
 
 #[derive(ClapArgs, Debug)]
 #[command(about = "Discover the tool surface of an MCP server")]
