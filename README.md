@@ -117,6 +117,20 @@ capframe report --findings capframe.findings.json --format pdf  --out report.pdf
 3. **Guard** evaluates every tool call against the token + a policy synthesized from Find's output — deterministic, single-digit microsecond decisions.
 4. **Report** rolls findings (and, on the roadmap, token grants + Guard logs) into an HTML / PDF audit document.
 
+## Security posture
+
+A security tool that hasn't audited itself is a security claim. Capframe ships under the audit posture we apply to other people's code: every module is versioned, CHANGELOGed, and carries a directed test corpus for the threat class it's designed to detect. We run a hardening pass across the three modules on a quarterly cadence; the 2026-05 pass found and fixed two real defects, both of the same shape — a serialization layer that silently accepts more than the consumer can parse.
+
+- **mcp-guard 0.5.7 — type-confusion fail-open in the policy evaluator.** Positive deny operators (`contains`, `matches`, `starts_with`, `equals`, `in`) returned `False` ("don't deny") the instant the argument was not a plain `str`. A rule that caught the literal value `"x@evil.com"` failed to fire when the same value arrived as `["x@evil.com"]` (list) or `{"to": "x@evil.com"}` (dict). Fixed by recursing positive ops through list/tuple/dict; negative and allow-list ops kept whole-value to avoid opening a different bypass class. Corpus expanded with an explicit type-confusion category (304 → 308 cases; TPR holds at 1.00, FPR unchanged).
+
+- **mcp-recon 0.2.3 — Debug-formatter mismatch on the Find→Bind handoff.** `caveats_v1` embedded tool names into `tool == "…"` / `tool != "…"` predicates via Rust's `Debug` formatter, which emits `\r`, `\0`, and `\u{..}` escapes capnagent's caveat-DSL parser rejects. Any tool name carrying such a character produced a caveat string that failed parsing on the receiving end, silently breaking the handoff — and since the upstream MCP server controls the name, a hostile server could weaponize the gap. Fixed with an explicit DSL-safe serializer; tool names containing un-escapable control characters now fail closed to a `recommend: "deny"` plan instead of emitting unparseable caveats. Tests round-trip every predicate through a vendored equivalent of the consumer's parser (35 → 45 core tests).
+
+- **capnagent 0.7.4** went through the same pass without surfacing a parallel defect. That is not a claim the module is bug-free; it is the honest record of what this review found.
+
+Both defects were located by reading both sides of the relevant boundary, not by fuzzing — fuzzing finds crashes, directed code reading finds silent fail-opens. Both were fixed under TDD with the failing test written first, and the corpus that proved the defect is retained as a regression guard. The pattern they share — a defensive layer being more lenient than the layer it hands off to — is the canonical class for security-tool boundary bugs, and the next pass will look for more of it.
+
+See each module's CHANGELOG for the full record, including what didn't change.
+
 ## Compliance mapping
 
 Each finding carries identifiers from:
