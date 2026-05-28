@@ -29,12 +29,12 @@ which              = { workspace = true }
 capframe-findings  = { workspace = true }
 
 # In-process dispatch for `capframe find` — calls the classifier as a
-# library instead of shelling out to the `mcp-recon` binary. Path dep so
-# local checkouts compose; CI / release builds should switch this to a
-# git dep pinned to the matching mcp-recon tag (or a crates.io version
-# once mcp-recon-core is published). The `--external` flag still routes
-# through the on-PATH binary if the user needs a different version.
-mcp-recon-core     = { path = "../../../mcp-recon/crates/mcp-recon-core" }
+# library instead of shelling out to the `mcp-recon` binary. Pinned by
+# tag so CI is reproducible across machines; bump the tag in lockstep
+# with mcp-recon releases that change the classifier surface. The
+# `--external` flag still routes through the on-PATH binary if a user
+# needs a different version than the one we compiled against.
+mcp-recon-core     = { git = "https://github.com/euanmcrosson-dotcom/mcp-recon", tag = "v0.0.13" }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

@@ -790,7 +790,8 @@ dependencies = [
 
 [[package]]
 name = "mcp-recon-core"
-version = "0.0.12"
+version = "0.0.13"
+source = "git+https://github.com/euanmcrosson-dotcom/mcp-recon?tag=v0.0.13#36f3079bdf3593f3690c98763a1783933972c480"
 dependencies = [
  "serde",
  "serde_json",
