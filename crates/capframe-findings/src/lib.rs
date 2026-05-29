@@ -1,8 +1,15 @@
 //! Capframe findings v1 — wire format shared by all modules.
 //! See `schemas/findings.v1.json` for the canonical schema.
+//!
+//! v2 (ecosystem-aware, used by the public leaderboard) lives in the
+//! [`v2`] module; see `schemas/findings.v2.json`. v2 reuses v1's [`Finding`],
+//! [`Tool`], [`Severity`], [`Category`], and [`Mappings`] types unchanged —
+//! only the envelope around them differs.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use time::OffsetDateTime;
+
+pub mod v2;
 
 pub const SCHEMA_VERSION: &str = "capframe.findings.v1";
 

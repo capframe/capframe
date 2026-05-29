@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://capframe.ai/schemas/findings.v2.json",
+  "title": "Capframe Findings v2",
+  "description": "Ecosystem-aware findings format. Replaces v1's thin `target` with a rich `server` identity (handle, repo_url, source) so findings can be aggregated across thousands of MCP servers for the public leaderboard at capframe.ai/leaderboard. Items inside `findings[]` are byte-identical to v1 — the rule engine is unchanged.",
+  "type": "object",
+  "required": ["schema_version", "scan_id", "scanned_at", "scanner", "server", "findings", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "capframe.findings.v2" },
+    "scan_id":        { "type": "string", "format": "uuid", "description": "Required in v2 (was optional in v1). Identifies one scan run; used by the aggregator to dedupe and diff." },
+    "scanned_at":     { "type": "string", "format": "date-time" },
+
+    "scanner": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name":    { "type": "string", "examples": ["capframe-find", "mcp-recon"] },
+        "version": { "type": "string", "examples": ["0.1.0"] }
+      }
+    },
+
+    "server": {
+      "type": "object",
+      "description": "Rich server identity — the primary aggregation key for the leaderboard.",
+      "required": ["handle", "kind", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "handle":    { "type": "string", "description": "Stable globally-unique identifier. Format: `<registry>:<scope/name>@<version>` (e.g. `npm:@modelcontextprotocol/server-everything@0.1.0`, `pypi:mcp-server-git@0.6.0`, `http://mcp.example.com/v1`).", "minLength": 1 },
+        "kind":      { "$ref": "#/$defs/TargetKind" },
+        "source":    { "type": "string", "enum": ["registry", "http", "sandbox", "file"], "description": "How this inventory was produced. `registry` = static metadata read; `http` = live HTTP enumeration; `sandbox` = stdio enumeration in a microVM; `file` = hand-authored inventory." },
+        "repo_url":  { "type": "string", "format": "uri", "description": "GitHub/GitLab URL if known." },
+        "name":      { "type": "string", "description": "Human-readable name (may differ from handle)." },
+        "transport": { "type": "string", "enum": ["stdio", "http", "sse", "websocket"] }
+      }
+    },
+
+    "tools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Tool" }
+    },
+
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Finding" },
+      "description": "Item shape is byte-identical to findings.v1's Finding type. Rule engine emits these without modification."
+    },
+
+    "summary": {
+      "type": "object",
+      "required": ["total", "by_severity"],
+      "additionalProperties": false,
+      "properties": {
+        "total":        { "type": "integer", "minimum": 0 },
+        "by_severity":  { "$ref": "#/$defs/SeverityCounts" },
+        "by_category":  {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "mappings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "owasp_llm":   { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "nist_rmf":    { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "mitre_atlas": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+          }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "Severity": {
+      "type": "string",
+      "enum": ["info", "low", "medium", "high", "critical"]
+    },
+
+    "SeverityCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "info":     { "type": "integer", "minimum": 0, "default": 0 },
+        "low":      { "type": "integer", "minimum": 0, "default": 0 },
+        "medium":   { "type": "integer", "minimum": 0, "default": 0 },
+        "high":     { "type": "integer", "minimum": 0, "default": 0 },
+        "critical": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+
+    "TargetKind": {
+      "type": "string",
+      "enum": [
+        "mcp_server",
+        "openai_function",
+        "anthropic_tool",
+        "langgraph_node",
+        "custom"
+      ]
+    },
+
+    "Category": {
+      "type": "string",
+      "description": "Class of finding. Stable across scanner implementations.",
+      "enum": [
+        "indirect_injection",
+        "excessive_agency",
+        "unconstrained_input",
+        "missing_authz",
+        "insecure_output_handling",
+        "secret_exposure",
+        "tool_naming_conflict",
+        "deserialization",
+        "ssrf_surface",
+        "filesystem_egress",
+        "network_egress",
+        "untrusted_dependency",
+        "other"
+      ]
+    },
+
+    "Tool": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name":        { "type": "string" },
+        "description": { "type": "string" },
+        "parameters":  { "type": "object" },
+        "side_effects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["read", "write", "network", "filesystem", "execute", "money", "irreversible"]
+          },
+          "uniqueItems": true
+        },
+        "auth_required":  { "type": "boolean" },
+        "rate_limited":   { "type": "boolean" }
+      }
+    },
+
+    "Finding": {
+      "type": "object",
+      "required": ["id", "severity", "category", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id":          { "type": "string", "description": "stable hash, suitable for diffing across scans" },
+        "severity":    { "$ref": "#/$defs/Severity" },
+        "category":    { "$ref": "#/$defs/Category" },
+        "title":       { "type": "string", "maxLength": 200 },
+        "description": { "type": "string" },
+        "tool":        { "type": "string", "description": "name of the tool this finding relates to, if any" },
+        "evidence":    { "type": "object", "description": "scanner-specific structured evidence" },
+        "remediation": { "type": "string" },
+        "mappings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "owasp_llm":   { "type": "array", "items": { "type": "string", "pattern": "^LLM(0[1-9]|10)$" }, "uniqueItems": true },
+            "nist_rmf":    { "type": "array", "items": { "type": "string", "pattern": "^(GOVERN|MAP|MEASURE|MANAGE)-[0-9]+(\\.[0-9]+)*$" }, "uniqueItems": true },
+            "mitre_atlas": { "type": "array", "items": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" }, "uniqueItems": true }
+          }
+        },
+        "first_seen":  { "type": "string", "format": "date-time" },
+        "last_seen":   { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

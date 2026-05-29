@@ -1,0 +1,46 @@
+{
+  "schema_version": "capframe.findings.v2",
+  "scan_id": "9c1e90e3-7a91-4c52-9c1e-aa8e90e3f6b1",
+  "scanned_at": "2026-05-29T19:32:00Z",
+  "scanner": { "name": "mcp-recon", "version": "0.0.13" },
+  "server": {
+    "handle": "npm:@modelcontextprotocol/server-everything@0.1.0",
+    "kind": "mcp_server",
+    "source": "registry",
+    "repo_url": "https://github.com/modelcontextprotocol/servers",
+    "name": "server-everything",
+    "transport": "stdio"
+  },
+  "tools": [
+    {
+      "name": "fetch_url",
+      "description": "Fetch arbitrary URL contents",
+      "side_effects": ["network", "read"]
+    }
+  ],
+  "findings": [
+    {
+      "id": "f-r6-fetch_url",
+      "severity": "medium",
+      "category": "indirect_injection",
+      "title": "fetch_url description implies external web fetch (R6)",
+      "description": "Tool description mentions URL fetching — surface for indirect prompt injection from fetched content.",
+      "tool": "fetch_url",
+      "mappings": {
+        "owasp_llm":   ["LLM01"],
+        "nist_rmf":    ["MEASURE-2.7"],
+        "mitre_atlas": ["T0051"]
+      }
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "by_severity": { "info": 0, "low": 0, "medium": 1, "high": 0, "critical": 0 },
+    "by_category": { "indirect_injection": 1 },
+    "mappings": {
+      "owasp_llm":   ["LLM01"],
+      "nist_rmf":    ["MEASURE-2.7"],
+      "mitre_atlas": ["T0051"]
+    }
+  }
+}
