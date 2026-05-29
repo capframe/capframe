@@ -50,6 +50,20 @@ fn rows_carry_identity_through() {
     );
     assert_eq!(risky.counts.critical, 1);
     assert_eq!(risky.counts.medium, 1);
+    // tool_count flows from the v2 doc's tools[] length
+    assert_eq!(risky.tool_count, 3);
+    let mid = board
+        .rows
+        .iter()
+        .find(|r| r.handle == "pypi:mid-server@0.5.0")
+        .unwrap();
+    assert_eq!(mid.tool_count, 2);
+    let good = board
+        .rows
+        .iter()
+        .find(|r| r.handle == "npm:@safe/good-server@1.0.0")
+        .unwrap();
+    assert_eq!(good.tool_count, 0);
 }
 
 #[test]

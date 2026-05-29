@@ -8,7 +8,7 @@
     "kind": "mcp_server",
     "source": "registry"
   },
-  "tools": [],
+  "tools": [{ "name": "read_file" }, { "name": "write_file" }],
   "findings": [
     { "id": "f-r3-mut", "severity": "high", "category": "excessive_agency", "title": "h" },
     { "id": "f-r6-fetch", "severity": "medium", "category": "indirect_injection", "title": "m" }

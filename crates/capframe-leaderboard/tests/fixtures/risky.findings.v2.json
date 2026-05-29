@@ -11,7 +11,11 @@
     "name": "exec-server",
     "transport": "stdio"
   },
-  "tools": [],
+  "tools": [
+    { "name": "exec_shell" },
+    { "name": "fetch_url" },
+    { "name": "delete_file" }
+  ],
   "findings": [
     {
       "id": "f-r7-exec",
