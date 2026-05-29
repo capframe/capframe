@@ -34,7 +34,7 @@ concurrency:
 env:
   RUST_BACKTRACE: "1"
   MCP_RECON_REPO: euanmcrosson-dotcom/mcp-recon
-  MCP_RECON_REF: feat/producer-registry # bump to the released tag once merged
+  MCP_RECON_REF: master # bump to a tag once mcp-recon cuts a release that includes the producer
   WEBSITE_REPO: capframe/website
   WEBSITE_SAMPLE_PATH: src/lib/leaderboard/sample.json
   CORPUS_PATH: examples/registry-corpus.example.json # lives in mcp-recon
