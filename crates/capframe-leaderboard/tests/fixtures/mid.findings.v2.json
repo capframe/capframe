@@ -1,0 +1,20 @@
+{
+  "schema_version": "capframe.findings.v2",
+  "scan_id": "33333333-3333-3333-3333-333333333333",
+  "scanned_at": "2026-05-29T18:00:00Z",
+  "scanner": { "name": "mcp-recon", "version": "0.0.13" },
+  "server": {
+    "handle": "pypi:mid-server@0.5.0",
+    "kind": "mcp_server",
+    "source": "registry"
+  },
+  "tools": [],
+  "findings": [
+    { "id": "f-r3-mut", "severity": "high", "category": "excessive_agency", "title": "h" },
+    { "id": "f-r6-fetch", "severity": "medium", "category": "indirect_injection", "title": "m" }
+  ],
+  "summary": {
+    "total": 2,
+    "by_severity": { "info": 0, "low": 0, "medium": 1, "high": 1, "critical": 0 }
+  }
+}
