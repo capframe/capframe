@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/capframe-cli",
     "crates/capframe-findings",
+    "crates/capframe-leaderboard",
 ]
 
 [workspace.package]

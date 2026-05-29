@@ -1,0 +1,20 @@
+{
+  "schema_version": "capframe.findings.v2",
+  "scan_id": "11111111-1111-1111-1111-111111111111",
+  "scanned_at": "2026-05-29T18:00:00Z",
+  "scanner": { "name": "mcp-recon", "version": "0.0.13" },
+  "server": {
+    "handle": "npm:@safe/good-server@1.0.0",
+    "kind": "mcp_server",
+    "source": "registry",
+    "repo_url": "https://github.com/safe/good-server",
+    "name": "good-server",
+    "transport": "stdio"
+  },
+  "tools": [],
+  "findings": [],
+  "summary": {
+    "total": 0,
+    "by_severity": { "info": 0, "low": 0, "medium": 0, "high": 0, "critical": 0 }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": "capframe.findings.v2",
+  "scan_id": "22222222-2222-2222-2222-222222222222",
+  "scanned_at": "2026-05-29T18:00:00Z",
+  "scanner": { "name": "mcp-recon", "version": "0.0.13" },
+  "server": {
+    "handle": "npm:@risky/exec-server@2.0.0",
+    "kind": "mcp_server",
+    "source": "registry",
+    "repo_url": "https://github.com/risky/exec-server",
+    "name": "exec-server",
+    "transport": "stdio"
+  },
+  "tools": [],
+  "findings": [
+    {
+      "id": "f-r7-exec",
+      "severity": "critical",
+      "category": "excessive_agency",
+      "title": "exec tool surface"
+    },
+    {
+      "id": "f-r6-fetch",
+      "severity": "medium",
+      "category": "indirect_injection",
+      "title": "fetch tool surface"
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "by_severity": { "info": 0, "low": 0, "medium": 1, "high": 0, "critical": 1 }
+  }
+}

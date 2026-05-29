@@ -196,6 +196,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "capframe-leaderboard"
+version = "0.2.1"
+dependencies = [
+ "anyhow",
+ "capframe-findings",
+ "clap",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "time",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
