@@ -1,0 +1,127 @@
+name: leaderboard-daily
+
+# Runs the full Capframe MCP-ecosystem leaderboard pipeline once a
+# day. The Rust producer + aggregator can't easily run in a Vercel
+# function — they need cargo build, multiple binaries, and minutes of
+# runtime — so they live here. The Vercel side just revalidates ISR
+# after this workflow has pushed a fresh sample.json.
+#
+# Pipeline:
+#   1. Build mcp-recon binary from its repo (pinned commit/tag).
+#   2. Build the capframe-leaderboard binary from THIS repo.
+#   3. Run `mcp-recon producer registry` against the corpus.
+#   4. Run `capframe-leaderboard build` to aggregate findings -> JSON.
+#   5. Commit the refreshed sample.json into the capframe-website
+#      repo (cross-repo push via a fine-grained PAT).
+#
+# Required secrets (configure in repo Settings -> Secrets):
+#   LEADERBOARD_PUSH_TOKEN   PAT or App token with contents:write on
+#                            github.com/capframe/website.
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC daily
+  workflow_dispatch:
+    # Manual trigger for testing the wiring; no inputs needed.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leaderboard-daily
+  cancel-in-progress: false
+
+env:
+  RUST_BACKTRACE: "1"
+  MCP_RECON_REPO: euanmcrosson-dotcom/mcp-recon
+  MCP_RECON_REF: master # bump to a tag once mcp-recon cuts a release that includes the producer
+  WEBSITE_REPO: capframe/website
+  WEBSITE_SAMPLE_PATH: src/lib/leaderboard/sample.json
+  CORPUS_PATH: examples/registry-corpus.example.json # lives in mcp-recon
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout capframe (this repo)
+        uses: actions/checkout@v4
+        with:
+          path: capframe
+
+      - name: Checkout mcp-recon
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MCP_RECON_REPO }}
+          ref: ${{ env.MCP_RECON_REF }}
+          path: mcp-recon
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ hashFiles('capframe/Cargo.lock', 'mcp-recon/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Build mcp-recon (release)
+        working-directory: mcp-recon
+        run: cargo build --release -p mcp-recon-cli
+
+      - name: Build capframe-leaderboard (release)
+        working-directory: capframe
+        run: cargo build --release -p capframe-leaderboard
+
+      - name: Run producer (registry path)
+        working-directory: mcp-recon
+        run: |
+          mkdir -p ../findings
+          ./target/release/mcp-recon producer registry \
+            "${{ env.CORPUS_PATH }}" \
+            --out-dir ../findings \
+            --pretty
+
+      - name: Aggregate into leaderboard.json
+        working-directory: capframe
+        run: |
+          ./target/release/capframe-leaderboard build \
+            --findings ../findings \
+            --out ../leaderboard.json \
+            --pretty
+          echo "--- preview ---"
+          head -c 1024 ../leaderboard.json
+          echo
+
+      - name: Checkout capframe-website (with push token)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.WEBSITE_REPO }}
+          token: ${{ secrets.LEADERBOARD_PUSH_TOKEN }}
+          path: website
+          fetch-depth: 1
+
+      - name: Stage refreshed sample.json
+        run: |
+          mkdir -p "website/$(dirname "${{ env.WEBSITE_SAMPLE_PATH }}")"
+          cp leaderboard.json "website/${{ env.WEBSITE_SAMPLE_PATH }}"
+
+      - name: Commit + push (only if changed)
+        working-directory: website
+        env:
+          GIT_AUTHOR_NAME: capframe-leaderboard-bot
+          GIT_AUTHOR_EMAIL: bot@capframe.ai
+          GIT_COMMITTER_NAME: capframe-leaderboard-bot
+          GIT_COMMITTER_EMAIL: bot@capframe.ai
+        run: |
+          git add "${{ env.WEBSITE_SAMPLE_PATH }}"
+          if git diff --cached --quiet; then
+            echo "no leaderboard change — skipping commit"
+            exit 0
+          fi
+          git commit -m "chore(leaderboard): daily refresh $(date -u +%Y-%m-%d)"
+          git push origin HEAD

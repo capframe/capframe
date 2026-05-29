@@ -287,7 +287,8 @@ fn find_runs_in_process_against_a_real_inventory() {
         .map(|f| f["id"].as_str().unwrap())
         .collect();
     assert!(
-        ids.iter().any(|id| id.contains("r7") && id.contains("execute_shell")),
+        ids.iter()
+            .any(|id| id.contains("r7") && id.contains("execute_shell")),
         "R7 should fire on execute_shell; got {ids:?}"
     );
     assert_eq!(v["summary"]["by_severity"]["critical"], 1);
@@ -301,7 +302,11 @@ fn find_external_flag_actually_dispatches_to_on_path_binary() {
     let _mock = write_mock_module(dir.path(), "mcp-recon", "mcp-recon 0.0.12", &argv_log);
 
     let inventory = dir.path().join("inventory.json");
-    fs::write(&inventory, r#"{"schema":"mcp-recon.inventory.v1","servers":[]}"#).unwrap();
+    fs::write(
+        &inventory,
+        r#"{"schema":"mcp-recon.inventory.v1","servers":[]}"#,
+    )
+    .unwrap();
 
     capframe()
         .env("PATH", dir.path())

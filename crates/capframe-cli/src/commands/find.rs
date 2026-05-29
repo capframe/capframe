@@ -83,12 +83,7 @@ fn run_inprocess(args: &Args) -> Result<()> {
     let body = fs::read_to_string(&args.target)
         .with_context(|| format!("read {}", args.target.display()))?;
     let inv: mcp_recon_core::McpInventory = serde_json::from_str(&body)
-        .with_context(|| {
-            format!(
-                "parse {} as mcp-recon.inventory.v1",
-                args.target.display()
-            )
-        })?;
+        .with_context(|| format!("parse {} as mcp-recon.inventory.v1", args.target.display()))?;
     let core_findings = mcp_recon_core::classify(&inv);
     let envelope = build_envelope(&inv, &core_findings, &args.target);
     let json = if args.format == Format::Pretty {
@@ -249,7 +244,11 @@ fn severity_counts(findings: &[cff::Finding]) -> cff::SeverityCounts {
 mod tests {
     use super::*;
 
-    fn inv_with_one_tool(name: &str, desc: &str, params: serde_json::Value) -> mcp_recon_core::McpInventory {
+    fn inv_with_one_tool(
+        name: &str,
+        desc: &str,
+        params: serde_json::Value,
+    ) -> mcp_recon_core::McpInventory {
         mcp_recon_core::McpInventory {
             schema: mcp_recon_core::INVENTORY_SCHEMA.into(),
             servers: vec![mcp_recon_core::McpServer {
