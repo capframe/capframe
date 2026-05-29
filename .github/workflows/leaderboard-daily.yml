@@ -114,9 +114,9 @@ jobs:
         working-directory: website
         env:
           GIT_AUTHOR_NAME: capframe-leaderboard-bot
-          GIT_AUTHOR_EMAIL: bot@capframe.ai
+          GIT_AUTHOR_EMAIL: euanmcrosson@gmail.com
           GIT_COMMITTER_NAME: capframe-leaderboard-bot
-          GIT_COMMITTER_EMAIL: bot@capframe.ai
+          GIT_COMMITTER_EMAIL: euanmcrosson@gmail.com
         run: |
           git add "${{ env.WEBSITE_SAMPLE_PATH }}"
           if git diff --cached --quiet; then
