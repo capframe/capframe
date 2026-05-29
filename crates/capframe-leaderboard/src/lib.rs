@@ -81,6 +81,11 @@ pub struct Row {
     /// GitHub/GitLab URL if the producer recorded one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repo_url: Option<String>,
+    /// Number of tools the producer exposed for this server.
+    /// Surfaces producer maturity at a glance (a server with 44 tools
+    /// has had its README parsed; a server with 1 is fallback synthesis).
+    #[serde(default)]
+    pub tool_count: u32,
     /// Per-severity finding counts.
     pub counts: SeverityCounts,
     /// Last scan timestamp from the source findings.v2 document.
@@ -101,12 +106,14 @@ pub fn score_from_counts(counts: &SeverityCounts) -> u32 {
 fn row_from(doc: FindingsV2) -> Row {
     let counts = doc.summary.by_severity.clone();
     let score = score_from_counts(&counts);
+    let tool_count = u32::try_from(doc.tools.len()).unwrap_or(u32::MAX);
     Row {
         score,
         handle: doc.server.handle,
         source: doc.server.source,
         name: doc.server.name,
         repo_url: doc.server.repo_url,
+        tool_count,
         counts,
         last_scanned: doc.scanned_at,
     }
