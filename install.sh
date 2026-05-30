@@ -116,10 +116,12 @@ main() {
         case ":$PATH:" in
             *":$bin_dir:"*) info "$bin_dir already on PATH" ;;
             *) update_shell_rc "$bin_dir"
-               # shellcheck disable=SC2016
                # The literal '$PATH' inside the printf format is intentional —
                # we're rendering a copy-paste-able `export PATH="…:$PATH"`
-               # for the user's shell, not expanding it now.
+               # for the user's shell, not expanding it now. Disable must
+               # be on the immediately preceding line (action-shellcheck
+               # rejected explanatory comments in between).
+               # shellcheck disable=SC2016
                printf '%s   open a new shell, or run: %sexport PATH="%s:$PATH"%s\n' "$DIM" "$BOLD" "$bin_dir" "$RESET" ;;
         esac
     fi
