@@ -60,12 +60,12 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout capframe (this repo)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: capframe
 
       - name: Checkout mcp-recon
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.MCP_RECON_REPO }}
           ref: ${{ env.MCP_RECON_REF }}
@@ -157,7 +157,7 @@ jobs:
           echo
 
       - name: Checkout capframe-website (with push token)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.WEBSITE_REPO }}
           token: ${{ secrets.LEADERBOARD_PUSH_TOKEN }}
