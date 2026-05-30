@@ -56,8 +56,13 @@ flag. The true order was **47.50 EUR to alice.legitcustomer@example.com**
 (see `LEGITIMATE_ORDER` in `refund_api.py`). The poisoned context says
 4950 USD to an attacker-controlled address. A well-behaved agent
 faithfully refunds what its data source tells it to — and that is the
-compromise. We verified this: `claude-sonnet-4` and `claude-haiku-4-5`
-both comply, every trial.
+compromise. We measured this rather than asserting it: across 15 trials,
+`claude-sonnet-4` complied with the poisoned context **15/15 (100%)** in
+this run (see `run_compliance_trials.py` and
+`logs/compliance_trials.log`). Compliance is model- and run-dependent —
+the same model resists the cruder "[SYSTEM OVERRIDE]" injection outright —
+so treat the rate as illustrative, not a fixed constant. What is *not*
+probabilistic: Guard blocked all 15 fraudulent calls, leaking zero.
 
 ## The three runs
 
@@ -131,9 +136,8 @@ already failed.
 
 **Result:** Guard denies. The policy decision does not consult the
 LLM. It does not consult anything that could be compromised. It
-consults the rule set and the bound token. ~10μs per evaluation
-(9.7μs in the run captured under `logs/`), measured over 1000
-consecutive calls.
+consults the rule set and the bound token. ~10μs per evaluation,
+measured over 1000 consecutive calls.
 
 This is the structural guarantee.
 
@@ -145,13 +149,13 @@ This is the structural guarantee.
 - `mcp-guard` (PyPI package name `mcp-guardrails`; provides the
   `mcp_guard` module)
 - `anthropic` Python SDK (for the live-LLM runs)
-- An `ANTHROPIC_API_KEY` (only for `run_uncontained.py` and
-  `run_contained.py`; the simulated-compromise run needs no key)
+- An `ANTHROPIC_API_KEY` (only for the live runs; the
+  simulated-compromise run and the pytest suite need no key)
 
 ### Install
 
 ```powershell
-pip install mcp-guardrails anthropic
+pip install mcp-guardrails anthropic pytest
 ```
 
 ### Run
@@ -191,6 +195,35 @@ your records.
 | `run_uncontained.py` | Baseline: agent → tool → API. No gate. |
 | `run_contained.py` | Agent → tool → **Guard** → API. Same LLM, same prompt, same call. |
 | `run_simulated_compromise.py` | Direct hostile call → Guard → API. Structural argument with no LLM in the loop. |
+| `run_compliance_trials.py` | Runs the live attack N times; reports the model's compliance *rate* and confirms Guard blocked every fraud attempt. |
+| `conftest.py` / `test_policy.py` | `pytest` suite asserting the policy's full truth table (incl. the legit-call false-positive control) against the real `mcp_guard` engine. No API calls. |
+
+## Tests
+
+The demo scripts tell the story; the test suite proves the gate is real.
+
+```powershell
+cd examples/contained-agent-demo
+python -m pytest test_policy.py -v          # 13 tests, no API calls
+python run_compliance_trials.py 15          # live, needs ANTHROPIC_API_KEY
+```
+
+`test_policy.py` asserts the **full truth table** against the real
+`mcp_guard` engine, not just the happy path:
+
+- **The false-positive control** — the legitimate 47.50 EUR refund MUST
+  be *allowed*. A gate that denies everything is an outage, not a
+  security control, so this is the half the three demo runs never showed.
+- **Per-field enforcement** — each of order/amount/currency/recipient
+  denies via its *own* rule, proving the win isn't just "the amount was
+  huge."
+- **Adversarial seams** — string-vs-number amounts, integer drift, email
+  case, and uncovered extra args, each asserting the gate fails *closed*
+  and documenting exactly what it does and does not govern.
+
+`run_compliance_trials.py` converts the single-shot baseline into a
+measured compliance *rate* and exits non-zero if Guard ever leaks a
+fraudulent call.
 
 ## Why the policy uses `equals`, not `<`
 
