@@ -33,7 +33,7 @@ which              = "8.0"
 
 # dev-only
 assert_cmd = "2.0"
-jsonschema = { version = "0.18", default-features = false, features = ["draft202012"] }
+jsonschema = { version = "0.24", default-features = false, features = ["draft202012"] }
 predicates = "3.1"
 tempfile   = "3.10"
 
