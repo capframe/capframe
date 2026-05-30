@@ -9,9 +9,13 @@ name: leaderboard-daily
 # Pipeline:
 #   1. Build mcp-recon binary from its repo (pinned commit/tag).
 #   2. Build the capframe-leaderboard binary from THIS repo.
-#   3. Run `mcp-recon producer registry` against the corpus.
-#   4. Run `capframe-leaderboard build` to aggregate findings -> JSON.
-#   5. Commit the refreshed sample.json into the capframe-website
+#   3. Run `mcp-recon producer registry` against the broad corpus.
+#   4. Run `mcp-recon producer sandbox` against the sandbox corpus —
+#      Docker handshake captures real `tools/list` (parameter schemas)
+#      and OVERWRITES the same slug files the registry step just wrote.
+#      Aggregator stays agnostic and just reads whichever file lands.
+#   5. Run `capframe-leaderboard build` to aggregate findings -> JSON.
+#   6. Commit the refreshed sample.json into the capframe-website
 #      repo (cross-repo push via a fine-grained PAT).
 #
 # Required secrets (configure in repo Settings -> Secrets):
@@ -38,11 +42,16 @@ env:
   WEBSITE_REPO: capframe/website
   WEBSITE_SAMPLE_PATH: src/lib/leaderboard/sample.json
   CORPUS_PATH: examples/registry-corpus.example.json # lives in mcp-recon
+  SANDBOX_CORPUS_PATH: examples/sandbox-corpus.example.json # lives in mcp-recon
+  # Per-container wall-clock budget for the sandbox handshake (npm
+  # install + initialize + tools/list). Keep generous; large packages
+  # can install slowly inside the runner.
+  SANDBOX_TIMEOUT_SECS: "240"
 
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout capframe (this repo)
         uses: actions/checkout@v4
@@ -85,6 +94,33 @@ jobs:
             "${{ env.CORPUS_PATH }}" \
             --out-dir ../findings \
             --pretty
+
+      # Sandbox path: capture live tools/list (incl. parameter schemas)
+      # for the curated npm corpus. Each slug filename matches the
+      # registry step above, so sandbox findings overwrite registry
+      # findings for the same handle. This is how R1/R2/R4 actually
+      # fire on the leaderboard — without it those rules stay dark.
+      #
+      # ubuntu-latest ships Docker pre-installed, so no docker setup
+      # action is needed. Network egress required for `npm install`.
+      - name: Verify Docker is available
+        run: |
+          docker --version
+          docker pull node:20
+
+      - name: Run producer (sandbox path, npm only)
+        working-directory: mcp-recon
+        run: |
+          ./target/release/mcp-recon producer sandbox \
+            "${{ env.SANDBOX_CORPUS_PATH }}" \
+            --out-dir ../findings \
+            --timeout-secs "${{ env.SANDBOX_TIMEOUT_SECS }}" \
+            --pretty
+          echo "--- post-sandbox findings (slug -> source) ---"
+          for f in ../findings/*.findings.v2.json; do
+            src=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['server']['source'])" "$f" 2>/dev/null || echo unknown)
+            echo "  $(basename "$f") -> $src"
+          done
 
       - name: Aggregate into leaderboard.json
         working-directory: capframe
