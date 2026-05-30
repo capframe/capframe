@@ -1,0 +1,32 @@
+rules:
+  - id: refund-order-mismatch
+    tool: issue_refund
+    deny_when:
+      - arg: order_id
+        op: not_equals
+        ref: context.bound_order_id
+    reason: "order_id does not match the agent's token-bound order. Capability tokens are scoped to one specific order at a time; the agent cannot refund an order it was not bound to."
+
+  - id: refund-amount-mismatch
+    tool: issue_refund
+    deny_when:
+      - arg: amount
+        op: not_equals
+        ref: context.bound_amount
+    reason: "Refund amount does not match the token-bound amount (the original order total). Capability tokens bind to exact amounts; the agent cannot issue a refund larger than the order it was scoped to."
+
+  - id: refund-currency-mismatch
+    tool: issue_refund
+    deny_when:
+      - arg: currency
+        op: not_equals
+        ref: context.bound_currency
+    reason: "currency does not match the agent's token-bound currency. The token is scoped to a single currency."
+
+  - id: refund-recipient-mismatch
+    tool: issue_refund
+    deny_when:
+      - arg: recipient_email
+        op: not_equals
+        ref: context.bound_recipient_email
+    reason: "recipient_email does not match the customer-of-record email bound to the agent's token. Refunds may only go to the original payment email on the order."
