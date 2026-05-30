@@ -1,20 +1,20 @@
 use capframe_findings::v2::{FindingsV2, Server, ServerSource, SummaryV2, SCHEMA_VERSION_V2};
 use capframe_findings::{Mappings, Scanner, SeverityCounts, TargetKind};
-use jsonschema::JSONSchema;
+use jsonschema::Validator;
 use time::OffsetDateTime;
 
 const SCHEMA: &str = include_str!("../../../schemas/findings.v2.json");
 const EXAMPLE: &str = include_str!("../../../schemas/findings.v2.example.json");
 
-fn schema() -> JSONSchema {
+fn schema() -> Validator {
     let v: serde_json::Value = serde_json::from_str(SCHEMA).expect("v2 schema is valid json");
-    JSONSchema::options()
+    jsonschema::options()
         .with_draft(jsonschema::Draft::Draft202012)
-        .compile(&v)
+        .build(&v)
         .expect("v2 schema compiles")
 }
 
-fn assert_valid(s: &JSONSchema, doc: &serde_json::Value, context: &str) {
+fn assert_valid(s: &Validator, doc: &serde_json::Value, context: &str) {
     if let Err(errors) = s.validate(doc) {
         let msgs: Vec<String> = errors
             .map(|e| format!("  - {} @ {}", e, e.instance_path))
@@ -75,7 +75,7 @@ fn v2_schema_rejects_unknown_source() {
     example["server"]["source"] = serde_json::Value::String("smoke-signal".into());
     let s = schema();
     assert!(
-        s.validate(&example).is_err(),
+        !s.is_valid(&example),
         "schema must reject unknown server.source values"
     );
 }
@@ -87,7 +87,7 @@ fn v2_schema_requires_handle() {
     server.remove("handle");
     let s = schema();
     assert!(
-        s.validate(&example).is_err(),
+        !s.is_valid(&example),
         "schema must reject server without handle"
     );
 }
@@ -98,7 +98,7 @@ fn v2_schema_requires_scan_id() {
     example.as_object_mut().unwrap().remove("scan_id");
     let s = schema();
     assert!(
-        s.validate(&example).is_err(),
+        !s.is_valid(&example),
         "schema must reject v2 document without scan_id (required in v2; was optional in v1)"
     );
 }
@@ -109,7 +109,7 @@ fn v2_schema_rejects_v1_version_string() {
     example["schema_version"] = serde_json::Value::String("capframe.findings.v1".into());
     let s = schema();
     assert!(
-        s.validate(&example).is_err(),
+        !s.is_valid(&example),
         "v2 schema must reject v1's schema_version const"
     );
 }

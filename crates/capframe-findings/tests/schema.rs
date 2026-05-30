@@ -1,21 +1,21 @@
 use capframe_findings::{
     Findings, Mappings, Scanner, SeverityCounts, Summary, Target, TargetKind, SCHEMA_VERSION,
 };
-use jsonschema::JSONSchema;
+use jsonschema::Validator;
 use time::OffsetDateTime;
 
 const SCHEMA: &str = include_str!("../../../schemas/findings.v1.json");
 const EXAMPLE: &str = include_str!("../../../schemas/findings.example.json");
 
-fn schema() -> JSONSchema {
+fn schema() -> Validator {
     let v: serde_json::Value = serde_json::from_str(SCHEMA).expect("schema is valid json");
-    JSONSchema::options()
+    jsonschema::options()
         .with_draft(jsonschema::Draft::Draft202012)
-        .compile(&v)
+        .build(&v)
         .expect("schema compiles")
 }
 
-fn assert_valid(s: &JSONSchema, doc: &serde_json::Value, context: &str) {
+fn assert_valid(s: &Validator, doc: &serde_json::Value, context: &str) {
     if let Err(errors) = s.validate(doc) {
         let msgs: Vec<String> = errors
             .map(|e| format!("  - {} @ {}", e, e.instance_path))
@@ -74,7 +74,7 @@ fn schema_rejects_unknown_severity() {
     example["findings"][0]["severity"] = serde_json::Value::String("apocalyptic".into());
     let s = schema();
     assert!(
-        s.validate(&example).is_err(),
+        !s.is_valid(&example),
         "schema must reject unknown severity values"
     );
 }
@@ -86,7 +86,7 @@ fn schema_rejects_malformed_owasp_id() {
         serde_json::Value::Array(vec![serde_json::Value::String("LLM99".into())]);
     let s = schema();
     assert!(
-        s.validate(&example).is_err(),
+        !s.is_valid(&example),
         "owasp_llm pattern must reject LLM99 (out of range)"
     );
 }
