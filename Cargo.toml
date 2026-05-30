@@ -29,7 +29,7 @@ time               = { version = "0.3", features = ["serde", "formatting", "pars
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ureq               = { version = "2.10", default-features = false, features = ["tls", "json"] }
-which              = "6.0"
+which              = "8.0"
 
 # dev-only
 assert_cmd = "2.0"
