@@ -14,8 +14,12 @@ name: leaderboard-daily
 #      Docker handshake captures real `tools/list` (parameter schemas)
 #      and OVERWRITES the same slug files the registry step just wrote.
 #      Aggregator stays agnostic and just reads whichever file lands.
-#   5. Run `capframe-leaderboard build` to aggregate findings -> JSON.
-#   6. Commit the refreshed sample.json into the capframe-website
+#   5. Run `mcp-recon producer registry` against the HTTP corpus —
+#      same subcommand, but the handles are bare URLs so the producer
+#      dispatches to the live HTTP path (`source: http`). These are
+#      brand-new slugs, no overlap with the registry/sandbox passes.
+#   6. Run `capframe-leaderboard build` to aggregate findings -> JSON.
+#   7. Commit the refreshed sample.json into the capframe-website
 #      repo (cross-repo push via a fine-grained PAT).
 #
 # Required secrets (configure in repo Settings -> Secrets):
@@ -43,6 +47,7 @@ env:
   WEBSITE_SAMPLE_PATH: src/lib/leaderboard/sample.json
   CORPUS_PATH: examples/registry-corpus.example.json # lives in mcp-recon
   SANDBOX_CORPUS_PATH: examples/sandbox-corpus.example.json # lives in mcp-recon
+  HTTP_CORPUS_PATH: examples/http-corpus.example.json # lives in mcp-recon
   # Per-container wall-clock budget for the sandbox handshake (npm
   # install + initialize + tools/list). Keep generous; large packages
   # can install slowly inside the runner.
@@ -121,6 +126,23 @@ jobs:
             src=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['server']['source'])" "$f" 2>/dev/null || echo unknown)
             echo "  $(basename "$f") -> $src"
           done
+
+      # HTTP path: scan live public/unauthenticated HTTP MCP endpoints.
+      # `producer registry` dispatches on handle prefix, so a corpus of
+      # `https://...` URLs naturally routes to the HTTP producer with
+      # `source: http`. Brand-new slugs (URL-derived), no overlap with
+      # the registry/sandbox passes, so no overwrite logic needed.
+      # Failures here don't tank the cron — a dead endpoint just
+      # `[err]`s and the leaderboard renders without that row.
+      - name: Run producer (HTTP path)
+        working-directory: mcp-recon
+        run: |
+          ./target/release/mcp-recon producer registry \
+            "${{ env.HTTP_CORPUS_PATH }}" \
+            --out-dir ../findings \
+            --pretty
+          echo "--- post-http findings count ---"
+          ls -1 ../findings/https_*.findings.v2.json 2>/dev/null | wc -l || echo 0
 
       - name: Aggregate into leaderboard.json
         working-directory: capframe
