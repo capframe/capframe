@@ -45,6 +45,7 @@ env:
   MCP_RECON_REF: master # bump to a tag once mcp-recon cuts a release that includes the producer
   WEBSITE_REPO: capframe/website
   WEBSITE_SAMPLE_PATH: src/lib/leaderboard/sample.json
+  WEBSITE_HISTORY_DIR: src/lib/leaderboard/history # archived per-run snapshots
   CORPUS_PATH: examples/registry-corpus.example.json # lives in mcp-recon
   SANDBOX_CORPUS_PATH: examples/sandbox-corpus.example.json # lives in mcp-recon
   HTTP_CORPUS_PATH: examples/http-corpus.example.json # lives in mcp-recon
@@ -163,6 +164,33 @@ jobs:
           path: website
           fetch-depth: 1
 
+      # Archive the previous run before overwriting. The website ships
+      # with a single live sample.json plus a history/ dir of dated
+      # snapshots; the movers page diffs current vs the most recent
+      # snapshot. We key the archive filename off the OLD file's
+      # generated_at (not today's date) so workflow_dispatch reruns
+      # don't collide with themselves.
+      - name: Archive previous snapshot
+        run: |
+          mkdir -p "website/${{ env.WEBSITE_HISTORY_DIR }}"
+          if [ -f "website/${{ env.WEBSITE_SAMPLE_PATH }}" ]; then
+            prev_ts=$(python3 -c "import json; print(json.load(open('website/${{ env.WEBSITE_SAMPLE_PATH }}'))['generated_at'])")
+            prev_date=$(echo "$prev_ts" | cut -c1-19 | tr ':' '-')
+            archive="website/${{ env.WEBSITE_HISTORY_DIR }}/leaderboard-${prev_date}.json"
+            cp "website/${{ env.WEBSITE_SAMPLE_PATH }}" "$archive"
+            echo "archived previous snapshot -> $archive"
+          else
+            echo "no previous sample.json — nothing to archive"
+          fi
+
+      - name: Prune old snapshots (keep most recent 60)
+        working-directory: website
+        run: |
+          dir="${{ env.WEBSITE_HISTORY_DIR }}"
+          if [ -d "$dir" ]; then
+            ls -1 "$dir"/leaderboard-*.json 2>/dev/null | sort | head -n -60 | xargs -r rm -v
+          fi
+
       - name: Stage refreshed sample.json
         run: |
           mkdir -p "website/$(dirname "${{ env.WEBSITE_SAMPLE_PATH }}")"
@@ -176,7 +204,7 @@ jobs:
           GIT_COMMITTER_NAME: capframe-leaderboard-bot
           GIT_COMMITTER_EMAIL: euanmcrosson@gmail.com
         run: |
-          git add "${{ env.WEBSITE_SAMPLE_PATH }}"
+          git add "${{ env.WEBSITE_SAMPLE_PATH }}" "${{ env.WEBSITE_HISTORY_DIR }}"
           if git diff --cached --quiet; then
             echo "no leaderboard change — skipping commit"
             exit 0
