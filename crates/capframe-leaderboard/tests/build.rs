@@ -52,6 +52,11 @@ fn rows_carry_identity_through() {
     assert_eq!(risky.counts.medium, 1);
     // tool_count flows from the v2 doc's tools[] length
     assert_eq!(risky.tool_count, 3);
+    // findings array carries through end-to-end for the detail view
+    assert_eq!(risky.findings.len(), 2);
+    let ids: Vec<&str> = risky.findings.iter().map(|f| f.id.as_str()).collect();
+    assert!(ids.contains(&"f-r7-exec"));
+    assert!(ids.contains(&"f-r6-fetch"));
     let mid = board
         .rows
         .iter()
