@@ -20,7 +20,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use capframe_findings::v2::{FindingsV2, ServerSource};
-use capframe_findings::SeverityCounts;
+use capframe_findings::{Finding, SeverityCounts};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -91,6 +91,11 @@ pub struct Row {
     /// Last scan timestamp from the source findings.v2 document.
     #[serde(with = "time::serde::rfc3339")]
     pub last_scanned: OffsetDateTime,
+    /// Full findings list for the per-server detail view. Empty for
+    /// clean servers (score 100). Each entry is byte-identical to the
+    /// source findings.v2 document's findings[i].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<Finding>,
 }
 
 /// Compute score from severity counts using the public formula.
@@ -116,6 +121,7 @@ fn row_from(doc: FindingsV2) -> Row {
         tool_count,
         counts,
         last_scanned: doc.scanned_at,
+        findings: doc.findings,
     }
 }
 
