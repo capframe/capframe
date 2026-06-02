@@ -19,7 +19,7 @@ authors      = ["Capframe Contributors"]
 anyhow             = "1.0"
 clap               = { version = "4.5", features = ["derive", "env"] }
 dirs               = "6.0"
-maud               = "0.26"
+maud               = "0.27"
 semver             = "1.0"
 serde              = { version = "1.0", features = ["derive"] }
 serde_json         = "1.0"
