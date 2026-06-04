@@ -115,6 +115,104 @@ fn empty_dir_errors_with_helpful_message() {
 }
 
 #[test]
+fn all_malformed_dir_errors_instead_of_publishing_empty() {
+    // A run where EVERY input file fails to parse must error, not return a
+    // successful empty board that would silently wipe the published leaderboard.
+    let dir = TempDir::new().unwrap();
+    for slug in ["a", "b", "c"] {
+        fs::write(
+            dir.path().join(format!("{slug}.findings.v2.json")),
+            "{ not json",
+        )
+        .unwrap();
+    }
+    let err = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("parseable") && msg.contains('3'),
+        "error should report that all 3 files were skipped as malformed, got: {msg}"
+    );
+}
+
+#[test]
+fn score_comes_from_findings_not_self_reported_summary() {
+    // A producer that declares a clean summary while shipping a Critical in
+    // findings[] must NOT score 100. The score is derived from the actual
+    // findings the detail view renders, so the board can't be gamed by a lying
+    // summary counter.
+    let dir = TempDir::new().unwrap();
+    let body = r#"{
+        "schema_version":"capframe.findings.v2",
+        "scan_id":"00000000-0000-0000-0000-000000000000",
+        "scanned_at":"2026-05-29T18:00:00Z",
+        "scanner":{"name":"x","version":"0.0.0"},
+        "server":{"handle":"npm:@liar/server@1.0.0","kind":"mcp_server","source":"registry"},
+        "findings":[{"id":"f1","severity":"critical","category":"excessive_agency","title":"t"}],
+        "summary":{"total":0,"by_severity":{"info":0,"low":0,"medium":0,"high":0,"critical":0}}
+    }"#;
+    fs::write(dir.path().join("liar.findings.v2.json"), body).unwrap();
+
+    let board = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap();
+    let row = &board.rows[0];
+    assert_eq!(
+        row.score, 90,
+        "one critical -> 90 regardless of the declared summary"
+    );
+    assert_eq!(
+        row.counts.critical, 1,
+        "row counts must reflect findings[], not the lie"
+    );
+}
+
+#[test]
+fn duplicate_handles_collapse_to_newest_scan() {
+    // Two distinct files resolving to the SAME handle (e.g. a stale registry
+    // slug + a fresh sandbox slug) must produce ONE row, not two. The newer
+    // scan wins so the board reflects the latest grade.
+    let dir = TempDir::new().unwrap();
+    let doc = |slug: &str, scanned_at: &str, source: &str, findings: &str, sev: &str| {
+        let body = format!(
+            r#"{{
+                "schema_version":"capframe.findings.v2",
+                "scan_id":"00000000-0000-0000-0000-000000000000",
+                "scanned_at":"{scanned_at}",
+                "scanner":{{"name":"x","version":"0.0.0"}},
+                "server":{{"handle":"npm:@dup/server@1.0.0","kind":"mcp_server","source":"{source}"}},
+                "findings":{findings},
+                "summary":{{"total":0,"by_severity":{sev}}}
+            }}"#,
+        );
+        fs::write(dir.path().join(format!("{slug}.findings.v2.json")), body).unwrap();
+    };
+    // older registry scan: one critical -> score 90
+    doc(
+        "registry-slug",
+        "2026-05-29T18:00:00Z",
+        "registry",
+        r#"[{"id":"f1","severity":"critical","category":"excessive_agency","title":"t"}]"#,
+        r#"{"info":0,"low":0,"medium":0,"high":0,"critical":1}"#,
+    );
+    // newer sandbox scan: clean -> score 100
+    doc(
+        "sandbox-slug",
+        "2026-05-30T18:00:00Z",
+        "sandbox",
+        "[]",
+        r#"{"info":0,"low":0,"medium":0,"high":0,"critical":0}"#,
+    );
+
+    let board = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap();
+    assert_eq!(
+        board.total_scanned, 1,
+        "duplicate handle must collapse to one row"
+    );
+    let row = &board.rows[0];
+    assert_eq!(row.handle, "npm:@dup/server@1.0.0");
+    assert_eq!(row.score, SCORE_MAX, "newer (sandbox) scan should win");
+    assert_eq!(row.counts.critical, 0);
+}
+
+#[test]
 fn to_json_roundtrips_via_serde() {
     let dir = seed_fixtures();
     let board = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap();
