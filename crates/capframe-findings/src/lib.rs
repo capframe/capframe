@@ -14,6 +14,7 @@ pub mod v2;
 pub const SCHEMA_VERSION: &str = "capframe.findings.v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Findings {
     pub schema_version: String,
     #[serde(with = "time::serde::rfc3339")]
@@ -30,12 +31,14 @@ pub struct Findings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Scanner {
     pub name: String,
     pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Target {
     pub kind: TargetKind,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,6 +71,7 @@ pub enum Transport {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Tool {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -95,6 +99,7 @@ pub enum SideEffect {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Finding {
     pub id: String,
     pub severity: Severity,
@@ -153,6 +158,7 @@ pub enum Category {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Mappings {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub owasp_llm: Vec<String>,
@@ -169,6 +175,7 @@ impl Mappings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Summary {
     pub total: u32,
     pub by_severity: SeverityCounts,
@@ -178,7 +185,8 @@ pub struct Summary {
     pub mappings: Mappings,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SeverityCounts {
     #[serde(default)]
     pub info: u32,
@@ -204,5 +212,35 @@ mod tests {
         let back = serde_json::to_string(&parsed).expect("reserialize");
         let reparsed: Findings = serde_json::from_str(&back).expect("re-parse");
         assert_eq!(reparsed.summary.total, parsed.summary.total);
+    }
+
+    #[test]
+    fn rejects_unknown_fields() {
+        // The canonical schema sets `additionalProperties: false`; the Rust
+        // deserializer must agree rather than silently dropping the field.
+        let with_extra_top = r#"{
+            "schema_version":"capframe.findings.v1",
+            "scanned_at":"2026-05-17T14:32:00Z",
+            "scanner":{"name":"x","version":"0.0.0"},
+            "target":{"kind":"mcp_server"},
+            "summary":{"total":0,"by_severity":{"info":0,"low":0,"medium":0,"high":0,"critical":0}},
+            "bogus_top_level":true
+        }"#;
+        assert!(
+            serde_json::from_str::<Findings>(with_extra_top).is_err(),
+            "unknown top-level field must be rejected"
+        );
+
+        let with_extra_nested = r#"{
+            "schema_version":"capframe.findings.v1",
+            "scanned_at":"2026-05-17T14:32:00Z",
+            "scanner":{"name":"x","version":"0.0.0","oops":1},
+            "target":{"kind":"mcp_server"},
+            "summary":{"total":0,"by_severity":{"info":0,"low":0,"medium":0,"high":0,"critical":0}}
+        }"#;
+        assert!(
+            serde_json::from_str::<Findings>(with_extra_nested).is_err(),
+            "unknown nested field must be rejected"
+        );
     }
 }
