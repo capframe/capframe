@@ -102,6 +102,40 @@ fn doctor_reports_modules_missing_on_empty_path() {
 }
 
 #[test]
+fn doctor_flags_out_of_band_module_version() {
+    // doctor must actually run `--version` and check the compat band, not just
+    // report OK because the binary resolves on PATH. mcp-recon requires
+    // >=0.0.1,<0.1.0 — a 9.9.9 binary must be shown as incompatible (with its
+    // version), but doctor still exits success (it reports, it doesn't fail).
+    let dir = tempfile::tempdir().unwrap();
+    let argv_log = dir.path().join("argv.txt");
+    let _mock = write_mock_module(dir.path(), "mcp-recon", "mcp-recon 9.9.9", &argv_log);
+
+    capframe()
+        .env("PATH", dir.path())
+        .arg("doctor")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("9.9.9"))
+        .stdout(predicate::str::contains("requires"));
+}
+
+#[test]
+fn doctor_reports_version_for_compatible_module() {
+    let dir = tempfile::tempdir().unwrap();
+    let argv_log = dir.path().join("argv.txt");
+    let _mock = write_mock_module(dir.path(), "mcp-recon", "mcp-recon 0.0.12", &argv_log);
+
+    capframe()
+        .env("PATH", dir.path())
+        .arg("doctor")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("0.0.12"))
+        .stdout(predicate::str::contains("OK"));
+}
+
+#[test]
 fn bind_passes_limits_through_to_module() {
     let dir = tempfile::tempdir().unwrap();
     let argv_log = dir.path().join("argv.txt");

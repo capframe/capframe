@@ -35,6 +35,8 @@ The `capframe` binary is a single dispatcher CLI. The three modules ship from th
 
 Each module is independently usable. Capframe gives them a shared CLI, a shared findings format ([`findings.v1`](schemas/findings.v1.json)), and a unified audit report.
 
+For a map of this repo's internals — crates, dispatch, the version gate, the wire schema, and the leaderboard pipeline — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## Install
 
 ```bash

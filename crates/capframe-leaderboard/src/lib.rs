@@ -20,8 +20,9 @@
 
 use anyhow::{anyhow, Context, Result};
 use capframe_findings::v2::{FindingsV2, ServerSource};
-use capframe_findings::{Finding, SeverityCounts};
+use capframe_findings::{Finding, Severity, SeverityCounts};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use time::format_description::well_known::Rfc3339;
@@ -107,9 +108,57 @@ pub fn score_from_counts(counts: &SeverityCounts) -> u32 {
     SCORE_MAX.saturating_sub(penalty).min(SCORE_MAX)
 }
 
+/// Precedence of a source when two scans collide on the same handle. Higher
+/// wins: a sandbox scan (live `tools/list`, real grades) supersedes a registry
+/// scan (static manifest), matching the documented "sandbox overwrites
+/// registry" intent of the daily pipeline.
+fn source_rank(s: ServerSource) -> u8 {
+    match s {
+        ServerSource::Sandbox => 3,
+        ServerSource::Http => 2,
+        ServerSource::File => 1,
+        ServerSource::Registry => 0,
+    }
+}
+
+/// True if `cand` should replace `cur` as the row for a shared handle.
+/// Newest scan wins; ties break to the richer source, then to more tools.
+fn supersedes(cand: &Row, cur: &Row) -> bool {
+    (cand.last_scanned, source_rank(cand.source), cand.tool_count)
+        > (cur.last_scanned, source_rank(cur.source), cur.tool_count)
+}
+
+/// Tally severity counts directly from the findings array — the source of
+/// truth for the public score, since findings[] is exactly what the per-server
+/// detail view renders.
+fn counts_from_findings(findings: &[Finding]) -> SeverityCounts {
+    let mut c = SeverityCounts::default();
+    for f in findings {
+        match f.severity {
+            Severity::Info => c.info += 1,
+            Severity::Low => c.low += 1,
+            Severity::Medium => c.medium += 1,
+            Severity::High => c.high += 1,
+            Severity::Critical => c.critical += 1,
+        }
+    }
+    c
+}
+
 /// Convert one v2 document into a leaderboard row.
 fn row_from(doc: FindingsV2) -> Row {
-    let counts = doc.summary.by_severity.clone();
+    // Score from the actual findings, not the producer's self-reported summary:
+    // a doc that declares a clean summary while shipping Criticals must not be
+    // able to claim a perfect score and top the board.
+    let counts = counts_from_findings(&doc.findings);
+    if counts != doc.summary.by_severity {
+        tracing::warn!(
+            handle = %doc.server.handle,
+            declared = ?doc.summary.by_severity,
+            computed = ?counts,
+            "summary.by_severity disagrees with findings[]; scoring from findings[]",
+        );
+    }
     let score = score_from_counts(&counts);
     let tool_count = u32::try_from(doc.tools.len()).unwrap_or(u32::MAX);
     Row {
@@ -132,7 +181,12 @@ fn row_from(doc: FindingsV2) -> Row {
 /// one malformed file doesn't tank the whole leaderboard.
 pub fn build(dir: &Path, now: OffsetDateTime) -> Result<Leaderboard> {
     let entries = fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))?;
-    let mut rows: Vec<Row> = Vec::new();
+    // Aggregate by handle so two files that resolve to the same server (a stale
+    // registry slug + a fresh sandbox slug, a slugging change between producer
+    // versions) collapse to one row instead of emitting duplicate keys the
+    // downstream `/leaderboard` page cannot disambiguate. Map order is
+    // deterministic, so the result no longer depends on read_dir order.
+    let mut by_handle: BTreeMap<String, Row> = BTreeMap::new();
     let mut bad = 0_usize;
     for entry in entries {
         let entry = entry?;
@@ -145,7 +199,26 @@ pub fn build(dir: &Path, now: OffsetDateTime) -> Result<Leaderboard> {
             continue;
         }
         match parse_one(&path) {
-            Ok(doc) => rows.push(row_from(doc)),
+            Ok(doc) => {
+                let row = row_from(doc);
+                match by_handle.get(&row.handle) {
+                    Some(cur) if !supersedes(&row, cur) => {
+                        tracing::warn!(
+                            handle = %row.handle,
+                            "duplicate handle; kept earlier higher-precedence scan",
+                        );
+                    }
+                    existing => {
+                        if existing.is_some() {
+                            tracing::warn!(
+                                handle = %row.handle,
+                                "duplicate handle; superseded earlier scan",
+                            );
+                        }
+                        by_handle.insert(row.handle.clone(), row);
+                    }
+                }
+            }
             Err(err) => {
                 tracing::warn!(
                     file = %path.display(),
@@ -156,8 +229,20 @@ pub fn build(dir: &Path, now: OffsetDateTime) -> Result<Leaderboard> {
             }
         }
     }
-    if rows.is_empty() && bad == 0 {
-        return Err(anyhow!("no *.findings.v2.json files in {}", dir.display()));
+    let mut rows: Vec<Row> = by_handle.into_values().collect();
+    if rows.is_empty() {
+        // Fail closed: a run that produced zero rows is an error, never a
+        // successful empty board. When files were present but every one failed
+        // to parse, say so — silently publishing an empty leaderboard would
+        // wipe the live board and look like "every server unlisted".
+        return Err(if bad == 0 {
+            anyhow!("no *.findings.v2.json files in {}", dir.display())
+        } else {
+            anyhow!(
+                "no parseable *.findings.v2.json files in {} ({bad} skipped as malformed)",
+                dir.display()
+            )
+        });
     }
     rows.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.handle.cmp(&b.handle)));
     Ok(Leaderboard {

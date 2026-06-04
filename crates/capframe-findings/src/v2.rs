@@ -17,6 +17,7 @@ use crate::{Finding, Mappings, Scanner, SeverityCounts, TargetKind, Tool, Transp
 pub const SCHEMA_VERSION_V2: &str = "capframe.findings.v2";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FindingsV2 {
     pub schema_version: String,
     pub scan_id: String,
@@ -32,6 +33,7 @@ pub struct FindingsV2 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Server {
     pub handle: String,
     pub kind: TargetKind,
@@ -54,6 +56,7 @@ pub enum ServerSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SummaryV2 {
     pub total: u32,
     pub by_severity: SeverityCounts,
@@ -180,5 +183,23 @@ mod tests {
         assert_eq!(s, "\"sandbox\"");
         let parsed: ServerSource = serde_json::from_str("\"http\"").unwrap();
         assert_eq!(parsed, ServerSource::Http);
+    }
+
+    #[test]
+    fn rejects_unknown_fields() {
+        // v2 schema also sets additionalProperties:false everywhere.
+        let with_extra = r#"{
+            "schema_version":"capframe.findings.v2",
+            "scan_id":"00000000-0000-0000-0000-000000000000",
+            "scanned_at":"2026-05-29T18:00:00Z",
+            "scanner":{"name":"x","version":"0.0.0"},
+            "server":{"handle":"npm:x@1.0.0","kind":"mcp_server","source":"registry"},
+            "summary":{"total":0,"by_severity":{"info":0,"low":0,"medium":0,"high":0,"critical":0}},
+            "bogus_top_level":true
+        }"#;
+        assert!(
+            serde_json::from_str::<FindingsV2>(with_extra).is_err(),
+            "unknown top-level field must be rejected"
+        );
     }
 }
