@@ -91,7 +91,10 @@ pub fn run(args: Args) -> Result<()> {
     fs::create_dir_all(&bin_dir)
         .with_context(|| format!("create install dir: {}", bin_dir.display()))?;
 
-    let mut state = State::load(&root).unwrap_or_default();
+    // Propagate a corrupt state.json rather than swallowing it: starting from
+    // an empty State here would overwrite the file on save and lose the
+    // recorded provenance for every module not reinstalled this run.
+    let mut state = State::load(&root)?;
     let mut failures: Vec<&'static str> = Vec::new();
 
     for m in modules {
@@ -154,6 +157,9 @@ fn install_one(
                 None => resolve_latest_tag(owner, repo)
                     .with_context(|| format!("resolve latest tag for {owner}/{repo}"))?,
             };
+            // Whatever ends up in the download URL — a user pin or a resolved
+            // tag — must be tag-shaped before it reaches the network sink.
+            validate_version_pin(&version).context("invalid release version")?;
 
             let target = host_triple()?;
             let (archive_name, ext) = archive_name(binary, &version, &target);
@@ -173,9 +179,14 @@ fn install_one(
                 bail!("sha256 mismatch (expected {expected}, got {actual})");
             }
 
-            extract(&archive_path, &tmp, ext)?;
+            // Extract into a dedicated empty subdir, NOT the tmp dir that still
+            // holds the downloaded archive. This isolates the search space so a
+            // `..` entry that escapes to tmp/ is never picked up as the binary.
+            let extract_dir = tmp.join("extract");
+            fs::create_dir_all(&extract_dir)?;
+            extract(&archive_path, &extract_dir, ext)?;
 
-            let from = find_binary(&tmp, &bin_filename)
+            let from = find_binary(&extract_dir, &bin_filename)
                 .with_context(|| format!("locate {bin_filename} inside {archive_name}"))?;
             fs::copy(&from, &target_path)
                 .with_context(|| format!("install {}", target_path.display()))?;
@@ -310,7 +321,35 @@ fn extract(archive: &Path, into: &Path, _ext: &str) -> Result<()> {
     Ok(())
 }
 
+/// Validate a release identifier before it is interpolated into a download URL.
+/// A `--version` pin is fully user-controlled; restrict it to the shape of a
+/// real tag (alphanumerics plus `. _ - +`, no `..`, no slashes/whitespace) so a
+/// malformed value fails early with a clear error instead of building a
+/// confusing URL.
+fn validate_version_pin(v: &str) -> Result<()> {
+    if v.is_empty() {
+        bail!("release version must not be empty");
+    }
+    if v.contains("..") {
+        bail!("release version `{v}` must not contain `..`");
+    }
+    if !v
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '+'))
+    {
+        bail!("release version `{v}` must look like a tag (alphanumerics and `. _ - +` only)");
+    }
+    Ok(())
+}
+
+/// Locate the module binary inside the extracted tree. Requires EXACTLY ONE
+/// match — zero is an error, and multiple same-named entries are ambiguous and
+/// refused rather than resolved by non-deterministic filesystem-walk order. The
+/// winner must also resolve inside `root`, so a symlink or `..` entry in a
+/// (correctly-hashed but malformed) archive can't redirect the install outside
+/// the extraction dir.
 fn find_binary(root: &Path, name: &str) -> Result<PathBuf> {
+    let mut matches: Vec<PathBuf> = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         for entry in fs::read_dir(&dir)? {
@@ -319,11 +358,31 @@ fn find_binary(root: &Path, name: &str) -> Result<PathBuf> {
             if path.is_dir() {
                 stack.push(path);
             } else if path.file_name().and_then(|s| s.to_str()) == Some(name) {
-                return Ok(path);
+                matches.push(path);
             }
         }
     }
-    bail!("not found: {name} under {}", root.display())
+    match matches.as_slice() {
+        [] => bail!("not found: {name} under {}", root.display()),
+        [one] => {
+            let root_canon = fs::canonicalize(root)
+                .with_context(|| format!("canonicalize {}", root.display()))?;
+            let one_canon =
+                fs::canonicalize(one).with_context(|| format!("canonicalize {}", one.display()))?;
+            if !one_canon.starts_with(&root_canon) {
+                bail!(
+                    "{name} resolved outside the extraction dir: {}",
+                    one_canon.display()
+                );
+            }
+            Ok(one.clone())
+        }
+        many => bail!(
+            "ambiguous: {} entries named {name} under {} — refusing to guess",
+            many.len(),
+            root.display()
+        ),
+    }
 }
 
 fn make_tempdir(parent: &Path) -> Result<PathBuf> {
@@ -377,7 +436,16 @@ impl State {
         if !p.exists() {
             return Ok(Self::default());
         }
-        Ok(serde_json::from_str(&fs::read_to_string(&p)?).unwrap_or_default())
+        let body = fs::read_to_string(&p).with_context(|| format!("read {}", p.display()))?;
+        // Surface a corrupt state.json instead of silently discarding the
+        // recorded version/sha256 provenance and overwriting it with an empty
+        // map on the next save.
+        serde_json::from_str(&body).with_context(|| {
+            format!(
+                "parse {} (corrupt state.json — remove it to reinstall)",
+                p.display()
+            )
+        })
     }
     pub fn save(&self, root: &Path) -> Result<()> {
         let p = Self::path(root);
@@ -386,5 +454,60 @@ impl State {
         }
         fs::write(&p, serde_json::to_vec_pretty(self)?)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn version_pin_accepts_normal_tags() {
+        for ok in ["v0.3.1", "0.3.1", "v1.2.3-rc.1", "2024.05.01"] {
+            assert!(validate_version_pin(ok).is_ok(), "should accept `{ok}`");
+        }
+    }
+
+    #[test]
+    fn version_pin_rejects_dangerous_input() {
+        // empty, path traversal, slash, whitespace, shell metacharacters
+        for bad in ["", "../../etc", "a/b", "v1 0.0", "v1.0;rm -rf", "v1$(x)"] {
+            assert!(validate_version_pin(bad).is_err(), "should reject `{bad}`");
+        }
+    }
+
+    #[test]
+    fn find_binary_requires_exactly_one_match() {
+        let dir = tempdir().unwrap();
+        // zero matches -> error
+        assert!(find_binary(dir.path(), "mcp-recon").is_err());
+        // exactly one -> ok
+        fs::create_dir_all(dir.path().join("a")).unwrap();
+        fs::write(dir.path().join("a/mcp-recon"), b"x").unwrap();
+        assert!(find_binary(dir.path(), "mcp-recon").is_ok());
+        // two matches in different dirs -> ambiguous -> error (not first-wins)
+        fs::create_dir_all(dir.path().join("b")).unwrap();
+        fs::write(dir.path().join("b/mcp-recon"), b"x").unwrap();
+        assert!(
+            find_binary(dir.path(), "mcp-recon").is_err(),
+            "duplicate-named entries must be rejected, not silently first-match-won"
+        );
+    }
+
+    #[test]
+    fn state_load_errors_on_corrupt_file_instead_of_zeroing() {
+        let dir = tempdir().unwrap();
+        // missing state.json -> default (ok)
+        assert!(State::load(dir.path()).is_ok());
+        // valid -> ok
+        fs::write(State::path(dir.path()), r#"{"modules":{}}"#).unwrap();
+        assert!(State::load(dir.path()).is_ok());
+        // corrupt -> surfaced as error, NOT silently zeroed to an empty State
+        fs::write(State::path(dir.path()), "{ not json").unwrap();
+        assert!(
+            State::load(dir.path()).is_err(),
+            "corrupt state.json must error, not silently discard recorded provenance"
+        );
     }
 }

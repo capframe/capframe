@@ -40,6 +40,16 @@ pub fn run(args: Args) -> Result<()> {
     let body = fs::read_to_string(&args.findings)
         .with_context(|| format!("read findings: {}", args.findings.display()))?;
     let findings: Findings = serde_json::from_str(&body).context("parse findings v1")?;
+    // Mirror the leaderboard's parse_one: don't render a document whose
+    // schema_version we don't recognize as v1 (a future/hand-edited tag that
+    // happens to be structurally compatible would otherwise be mislabeled).
+    if findings.schema_version != capframe_findings::SCHEMA_VERSION {
+        bail!(
+            "unexpected schema_version `{}` (want {})",
+            findings.schema_version,
+            capframe_findings::SCHEMA_VERSION
+        );
+    }
 
     match args.format {
         Format::Json => {
@@ -58,7 +68,7 @@ pub fn run(args: Args) -> Result<()> {
 
 fn render_pdf(findings: &Findings, out: &Path, requested: Option<&str>) -> Result<()> {
     let tmp_html = tempfile_path(out, "html")?;
-    fs::write(&tmp_html, render_html(findings).into_string())?;
+    write_new(&tmp_html, render_html(findings).into_string().as_bytes())?;
 
     let tool = match requested {
         Some(t) => t.to_string(),
@@ -103,11 +113,27 @@ fn detect_pdf_tool() -> Option<String> {
 
 fn tempfile_path(near: &Path, ext: &str) -> Result<PathBuf> {
     let parent = near.parent().unwrap_or_else(|| Path::new("."));
+    let pid = std::process::id();
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    Ok(parent.join(format!(".capframe-report-{stamp}.{ext}")))
+    Ok(parent.join(format!(".capframe-report-{pid}-{stamp}.{ext}")))
+}
+
+/// Write `contents` to `path`, failing if anything already exists there
+/// (`O_EXCL`). The temp filename is predictable enough that a pre-planted
+/// symlink/file at that path could otherwise redirect the write; exclusive
+/// creation refuses to follow or clobber it.
+fn write_new(path: &Path, contents: &[u8]) -> Result<()> {
+    use std::io::Write as _;
+    let mut f = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .with_context(|| format!("create temp file {}", path.display()))?;
+    f.write_all(contents)?;
+    Ok(())
 }
 
 fn render_html(f: &Findings) -> Markup {
@@ -340,5 +366,44 @@ mod tests {
         assert!(html.contains("Capframe Findings Report"));
         assert!(html.contains("order.refund"));
         assert!(html.contains("LLM08"));
+    }
+
+    #[test]
+    fn rejects_wrong_schema_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let findings = dir.path().join("f.json");
+        // Structurally valid v1, but a schema_version the report can't claim to render.
+        let body = r#"{
+            "schema_version":"capframe.findings.v999",
+            "scanned_at":"2026-05-17T14:32:00Z",
+            "scanner":{"name":"x","version":"0.0.0"},
+            "target":{"kind":"mcp_server"},
+            "summary":{"total":0,"by_severity":{"info":0,"low":0,"medium":0,"high":0,"critical":0}}
+        }"#;
+        std::fs::write(&findings, body).unwrap();
+        let args = Args {
+            findings,
+            format: Format::Html,
+            out: dir.path().join("out.html"),
+            pdf_tool: None,
+        };
+        let err = run(args).unwrap_err();
+        assert!(
+            err.to_string().contains("schema_version"),
+            "should reject a wrong schema_version, got: {err}"
+        );
+    }
+
+    #[test]
+    fn write_new_refuses_existing_path() {
+        // Defeats a pre-planted symlink/file at a predictable temp path: the
+        // write must fail rather than follow/clobber an existing entry.
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("t.html");
+        assert!(write_new(&p, b"hello").is_ok(), "fresh path should write");
+        assert!(
+            write_new(&p, b"again").is_err(),
+            "existing path must be refused, not clobbered"
+        );
     }
 }
