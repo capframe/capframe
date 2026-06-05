@@ -213,6 +213,19 @@ fn duplicate_handles_collapse_to_newest_scan() {
 }
 
 #[test]
+fn non_regular_findings_entry_is_counted_not_silently_dropped() {
+    // A *directory* (or symlink) named like a findings file must be counted as
+    // skipped and surfaced, not silently dropped so the dir looks empty.
+    let dir = TempDir::new().unwrap();
+    fs::create_dir(dir.path().join("sneaky.findings.v2.json")).unwrap();
+    let err = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap_err();
+    assert!(
+        err.to_string().contains("skipped"),
+        "a present-but-skipped entry must be distinguished from an empty dir, got: {err}"
+    );
+}
+
+#[test]
 fn to_json_roundtrips_via_serde() {
     let dir = seed_fixtures();
     let board = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap();

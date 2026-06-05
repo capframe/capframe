@@ -191,11 +191,19 @@ pub fn build(dir: &Path, now: OffsetDateTime) -> Result<Leaderboard> {
     for entry in entries {
         let entry = entry?;
         let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
         let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
         if !name.ends_with(".findings.v2.json") {
+            continue;
+        }
+        // A correctly-named entry that is not a regular file (a directory or
+        // symlink) is counted as skipped and logged — not dropped silently —
+        // so "everything skipped" is distinguishable from "empty dir".
+        if !path.is_file() {
+            tracing::warn!(
+                file = %path.display(),
+                "skipping non-regular findings entry (not a regular file)",
+            );
+            bad += 1;
             continue;
         }
         match parse_one(&path) {
