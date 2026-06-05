@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::modules::{binary_version, resolve, Module};
+use crate::modules::{binary_version, resolve, version_in_band, Module};
 
 /// Health of one module binary as observed by `doctor`.
 enum Health {
@@ -42,7 +42,7 @@ fn health(m: Module) -> Health {
         Ok(r) => r,
         Err(e) => return Health::Unreadable(e.to_string()),
     };
-    if req.matches(&version) {
+    if version_in_band(&req, &version) {
         Health::Ok {
             version: version.to_string(),
             path: bin.display().to_string(),

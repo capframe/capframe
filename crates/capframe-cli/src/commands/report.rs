@@ -89,7 +89,7 @@ fn render_pdf(findings: &Findings, out: &Path, requested: Option<&str>) -> Resul
                 "--no-sandbox",
                 &format!("--print-to-pdf={}", out.display()),
             ])
-            .arg(format!("file://{}", tmp_html.display()))
+            .arg(file_url(&tmp_html))
             .status(),
         other => bail!("unknown --pdf-tool `{other}`"),
     }
@@ -100,6 +100,19 @@ fn render_pdf(findings: &Findings, out: &Path, requested: Option<&str>) -> Resul
         bail!("{tool} exited {status} writing {}", out.display());
     }
     Ok(())
+}
+
+/// Build a `file://` URL for a local path that Chromium can load on every
+/// platform. Backslashes become forward slashes and a drive-rooted Windows path
+/// (`C:/...`) gets the three-slash `file:///` prefix — `file://C:\...` did not
+/// load on Windows, so PDF rendering via Chromium was effectively broken there.
+fn file_url(path: &Path) -> String {
+    let s = path.display().to_string().replace('\\', "/");
+    if s.starts_with('/') {
+        format!("file://{s}")
+    } else {
+        format!("file:///{s}")
+    }
 }
 
 fn detect_pdf_tool() -> Option<String> {
@@ -391,6 +404,23 @@ mod tests {
         assert!(
             err.to_string().contains("schema_version"),
             "should reject a wrong schema_version, got: {err}"
+        );
+    }
+
+    #[test]
+    fn file_url_is_well_formed_cross_platform() {
+        use std::path::PathBuf;
+        // unix-style absolute -> three slashes
+        assert_eq!(
+            file_url(&PathBuf::from("/tmp/r.html")),
+            "file:///tmp/r.html"
+        );
+        // windows-style: backslashes become forward slashes and the drive path
+        // gets the `file:///` prefix Chromium needs (the old `file://C:\...` did
+        // not load on Windows)
+        assert_eq!(
+            file_url(&PathBuf::from(r"C:\Users\x\r.html")),
+            "file:///C:/Users/x/r.html"
         );
     }
 
