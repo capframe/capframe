@@ -281,6 +281,29 @@ mod tests {
     }
 
     #[test]
+    fn mcp_recon_core_version_matches_cargo_tag() {
+        // The stamped scanner.version is a hand-maintained constant; this guards
+        // it against drifting from the git tag the classifier is actually pinned
+        // to, so an envelope can't silently mislabel which classifier ran.
+        let manifest = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
+        let line = manifest
+            .lines()
+            .find(|l| l.contains("mcp-recon-core") && l.contains("tag"))
+            .expect("mcp-recon-core dependency line with a tag");
+        let tag = line
+            .split("tag")
+            .nth(1)
+            .and_then(|rest| rest.split('"').nth(1))
+            .expect("tag = \"...\" value");
+        assert_eq!(
+            tag.trim_start_matches('v'),
+            MCP_RECON_CORE_VERSION,
+            "MCP_RECON_CORE_VERSION ({MCP_RECON_CORE_VERSION}) is out of sync with the \
+             Cargo.toml git tag ({tag}); bump them together"
+        );
+    }
+
+    #[test]
     fn translator_preserves_severity_category_and_mappings() {
         // Construct a synthetic core finding (all the fields we care about).
         let core = mcp_recon_core::Finding {

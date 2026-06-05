@@ -8,7 +8,7 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": { "const": "capframe.findings.v2" },
-    "scan_id":        { "type": "string", "format": "uuid", "description": "Required in v2 (was optional in v1). Identifies one scan run; used by the aggregator to dedupe and diff." },
+    "scan_id":        { "type": "string", "format": "uuid", "description": "Required in v2 (was optional in v1). Identifies one scan run. The leaderboard aggregates and dedupes by server.handle, not scan_id." },
     "scanned_at":     { "type": "string", "format": "date-time" },
 
     "scanner": {

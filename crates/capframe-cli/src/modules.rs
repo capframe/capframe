@@ -58,6 +58,23 @@ pub fn resolve(m: Module) -> Result<PathBuf> {
     })
 }
 
+/// Whether `v` satisfies `req`, treating a pre-release build as in-band when
+/// its release core is in band. semver only matches a pre-release when a
+/// comparator names that exact major.minor.patch with a pre-release, so a band
+/// like `>=0.0.1, <0.1.0` would reject a legitimate `0.0.13-rc.1` build of a
+/// compatible module. We accept the RC iff stripping the pre-release lands in
+/// band; an out-of-band version stays rejected, release or pre-release.
+pub(crate) fn version_in_band(req: &semver::VersionReq, v: &semver::Version) -> bool {
+    if req.matches(v) {
+        return true;
+    }
+    if !v.pre.is_empty() {
+        let core = semver::Version::new(v.major, v.minor, v.patch);
+        return req.matches(&core);
+    }
+    false
+}
+
 /// Resolve the module binary AND verify its version satisfies `Module::version_req`.
 pub fn resolve_compatible(m: Module) -> Result<PathBuf> {
     let bin = resolve(m)?;
@@ -65,7 +82,7 @@ pub fn resolve_compatible(m: Module) -> Result<PathBuf> {
         .with_context(|| format!("parse version_req for {}", m.underlying_binary()))?;
     let v =
         binary_version(&bin).with_context(|| format!("read --version from {}", bin.display()))?;
-    if !req.matches(&v) {
+    if !version_in_band(&req, &v) {
         bail!(
             "module `{}` is version {} but capframe requires {}.\n\
              Reinstall with: capframe install {}",
@@ -157,5 +174,29 @@ mod tests {
     #[test]
     fn errors_when_first_line_has_no_version() {
         assert!(parse_version("some-tool\nversion: 1.2.3\n").is_err());
+    }
+
+    #[test]
+    fn version_band_accepts_in_band_prerelease_but_not_out_of_band() {
+        let req = semver::VersionReq::parse(">=0.0.1, <0.1.0").unwrap();
+        // a release-candidate of an in-band version is accepted (its release
+        // core 0.0.13 is in band) — semver's default would reject it
+        assert!(version_in_band(
+            &req,
+            &semver::Version::parse("0.0.13-rc.1").unwrap()
+        ));
+        assert!(version_in_band(
+            &req,
+            &semver::Version::parse("0.0.13").unwrap()
+        ));
+        // out-of-band stays rejected, release or pre-release
+        assert!(!version_in_band(
+            &req,
+            &semver::Version::parse("0.5.0").unwrap()
+        ));
+        assert!(!version_in_band(
+            &req,
+            &semver::Version::parse("0.5.0-rc.1").unwrap()
+        ));
     }
 }
