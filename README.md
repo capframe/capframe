@@ -1,10 +1,11 @@
+
 <div align="center">
 
-# Capframe
+# Capframe — Capability Security for AI Agents
 
-**Capability-based security for AI agents.**
+**Built for agentic AI — not just LLMs.**
 
-Find what your agents touch. Bind their authority. Guard every call.
+Capframe is a deterministic security system that helps you control what AI agents can do when they use tools. It discovers risky capabilities, issues scoped permissions through capability tokens, and enforces them at runtime — without putting an LLM in the security decision path.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -14,11 +15,12 @@ Find what your agents touch. Bind their authority. Guard every call.
 
 ---
 
-## What is this?
+## Why Capframe?
 
-Capframe is a three-module security platform for AI agents that call tools — typically over MCP (Model Context Protocol), though adapters for other tool-calling interfaces are on the roadmap.
+ Modern AI agents can take real actions through tools (file systems, APIs, code execution, databases, etc.). Without proper controls, these agents become high-risk systems vulnerable to prompt injection, confused deputy attacks, and unintended or malicious behavior. 
+Capframe is a three-module security platform for AI agents that call tools — typically over MCP (Model Context Protocol), that fixes this underlying problem ! 
 
-It treats every tool call as a capability check:
+## Architecture
 
 1. **Find** the tool surface and the injection gaps in it.
 2. **Bind** the agent's authority with scoped, revocable capability tokens.
@@ -29,13 +31,23 @@ The `capframe` binary is a single dispatcher CLI. The three modules ship from th
 | Module | Subcommand | Source repo | Distribution |
 |---|---|---|---|
 | **Find** | `capframe find` | [mcp-recon](https://github.com/euanmcrosson-dotcom/mcp-recon) | GitHub Releases (native binary) |
-| **Bind** | `capframe bind` | [capnagent](https://github.com/euanmcrosson-dotcom/capnagent) | GitHub Releases + PyPI |
+| **Bind** | `capframe bind` | [capnagent](https://github.com/euanmcrosson-dotcom/capnagent) | GitHub Releases  |
 | **Guard** | `capframe guard` | [mcp-guard](https://github.com/euanmcrosson-dotcom/mcp-guard) | GitHub Releases + PyPI (`mcp-guardrails`) |
 | **Report** | `capframe report` | (this repo) | shipped with capframe |
 
 Each module is independently usable. Capframe gives them a shared CLI, a shared findings format ([`findings.v1`](schemas/findings.v1.json)), and a unified audit report.
 
 For a map of this repo's internals — crates, dispatch, the version gate, the wire schema, and the leaderboard pipeline — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+
+
+Components
+
+Component:    role:       language:Repository     
+mcp-recon,Tool discovery & risk classification,Rust,GitHub
+capnagent,Capability token issuance,Rust,GitHub
+mcp-guard,Runtime policy enforcement,Python,GitHub
+
 
 ## Install
 
@@ -110,7 +122,7 @@ capframe report --findings capframe.findings.json --format pdf  --out report.pdf
                          +----------------+
                                   |
                                   v
-                       OWASP / NIST / ATLAS
+                       OWASP / NIST / ATLAS/ CAST
                           audit artifact
 ```
 
@@ -118,6 +130,24 @@ capframe report --findings capframe.findings.json --format pdf  --out report.pdf
 2. **Bind** issues ed25519 holder-of-key capability tokens scoped to what each agent actually needs.
 3. **Guard** evaluates every tool call against the token + a policy synthesized from Find's output — deterministic, single-digit microsecond decisions.
 4. **Report** rolls findings (and, on the roadmap, token grants + Guard logs) into an HTML / PDF audit document.
+
+
+CAST — Capframe Agent Security Taxonomy
+Capframe introduces CAST (Capframe Agent Security Taxonomy), a set of risk categories specifically designed for tool-using AI agents.
+CAST defines 8 core risk categories that go beyond traditional LLM frameworks, including:
+
+Tool Capability Excess
+Indirect Injection via Tool Output
+Insufficient Capability Scoping
+Tool Metadata Poisoning
+Capability Boundary Violation
+Cross-Tool Propagation
+Persistent State Poisoning
+Uncontrolled Tool Invocation
+
+→ View full CAST documentation
+Each CAST category maps directly to Capframe’s modules, making the taxonomy actionable rather than theoretical.
+
 
 ## Security posture
 
@@ -143,16 +173,12 @@ Each finding carries identifiers from:
 
 The JSON Schema validates these patterns at the wire level; the example payload in `schemas/findings.example.json` is exercised in CI.
 
-## Architecture
+Use Cases
 
-```
-capframe/
-├── crates/
-│   ├── capframe-cli/        # dispatcher binary, install, doctor, report
-│   └── capframe-findings/   # findings.v1 shared schema (Rust types + tests)
-├── schemas/
-│   └── findings.v1.json     # canonical JSON Schema (Draft 2020-12)
-└── .github/workflows/       # CI + tagged-release builds for 6 targets
+Securing autonomous coding and research agents
+Protecting internal enterprise AI agents with tool access
+Building compliant AI systems in regulated industries
+Sandboxing agent capabilities during development and testing
 ```
 
 **Design principles**
@@ -177,6 +203,14 @@ Bump these in lockstep with breaking CLI changes in the underlying modules.
 ## Project status
 
 Capframe is pre-1.0. The three modules are independently usable today; the dispatcher CLI, sha256-verified installer, version-pinning gate, and HTML/PDF report generator landed at v0.2.
+
+
+Philosophy
+Capframe is built on three core principles:
+
+Deterministic Security — Security decisions must be reproducible and auditable.
+Least Privilege — Agents should only receive the capabilities they explicitly need.
+Defense in Depth — Combine discovery, authorization, and enforcement.
 
 Roadmap:
 
