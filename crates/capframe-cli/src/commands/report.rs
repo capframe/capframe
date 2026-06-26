@@ -1,7 +1,8 @@
 use anyhow::{anyhow, bail, Context, Result};
 use capframe_findings::v2::{from_v1, FindingsV2, Server, ServerSource, SCHEMA_VERSION_V2};
 use capframe_findings::{
-    Category, Finding, Mappings, Severity, SeverityCounts, TargetKind, Transport, SCHEMA_VERSION,
+    CastCategory, Category, Finding, Mappings, Severity, SeverityCounts, TargetKind, Transport,
+    SCHEMA_VERSION,
 };
 use clap::Args as ClapArgs;
 use maud::{html, Markup, PreEscaped, DOCTYPE};
@@ -158,6 +159,21 @@ fn cat_label(c: Category) -> &'static str {
         NetworkEgress => "Network egress",
         UntrustedDependency => "Untrusted dependency",
         Other => "Other",
+    }
+}
+
+fn cast_label(c: CastCategory) -> &'static str {
+    use CastCategory::*;
+    match c {
+        Cast01 => "CAST-01",
+        Cast02 => "CAST-02",
+        Cast03 => "CAST-03",
+        Cast04 => "CAST-04",
+        Cast05 => "CAST-05",
+        Cast06 => "CAST-06",
+        Cast07 => "CAST-07",
+        Cast08 => "CAST-08",
+        Cast09 => "CAST-09",
     }
 }
 
@@ -420,6 +436,14 @@ fn render_html(doc: &FindingsV2) -> Markup {
                                     div.f-remed { span.rk { "Remediation" } span { (rm) } }
                                 }
                                 @if !f.mappings.is_empty() { div.f-maps { (map_pills(&f.mappings)) } }
+                                @if !f.cast_category.is_empty() {
+                                    div.f-cast {
+                                        span.castlabel { "CAST" }
+                                        @for c in &f.cast_category {
+                                            span.pill.cast-pill { (cast_label(*c)) }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -710,11 +734,29 @@ table.index code{font-size:11px;color:var(--ink2)}
 footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;color:var(--ink3);font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.03em}
 @page{size:A4;margin:14mm 0}
 @media print{ body{background:#fff} .sheet{max-width:none;margin:0;padding:0 18mm} }
+.f-cast{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
+.castlabel{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-right:2px}
+.cast-pill{background:#f0f4ff;border-color:#c2ccee;color:#2c4a8c}
 "#;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renders_cast_pills_on_finding() {
+        let body = include_str!("../../../../schemas/findings.example.json");
+        let mut doc = load(body).expect("load v1 example");
+        if let Some(f) = doc.findings.first_mut() {
+            f.cast_category = vec![CastCategory::Cast01, CastCategory::Cast03];
+        }
+        let html = render_html(&doc).into_string();
+        assert!(
+            html.contains("CAST-01"),
+            "report must render CAST-01 pill"
+        );
+        assert!(html.contains("CAST-03"), "report must render CAST-03 pill");
+    }
 
     #[test]
     fn renders_v1_example_payload() {
