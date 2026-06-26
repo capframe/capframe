@@ -358,3 +358,164 @@ fn find_external_flag_actually_dispatches_to_on_path_binary() {
     assert!(argv.contains("--target"), "got: {argv}");
     assert!(argv.contains("--out"), "got: {argv}");
 }
+
+#[test]
+fn pipeline_find_bind_guard_full_cycle() {
+    // ── Setup ─────────────────────────────────────────────────────────────────
+    let dir = tempfile::tempdir().unwrap();
+    let argv_bind = dir.path().join("argv_bind.txt");
+    let argv_guard = dir.path().join("argv_guard.txt");
+
+    let _mock_capnagent = write_mock_module(dir.path(), "capnagent", "capnagent 0.7.5", &argv_bind);
+    let _mock_guard = write_mock_module(dir.path(), "mcp-guard", "mcp-guard 0.5.5", &argv_guard);
+
+    let inventory = dir.path().join("inventory.json");
+    let findings_out = dir.path().join("findings.json");
+
+    // Two dangerous tools: one monetary (R4), one exec (R7).
+    let inv = serde_json::json!({
+        "schema": "mcp-recon.inventory.v1",
+        "servers": [{
+            "name": "shopify-mcp",
+            "tools": [
+                {
+                    "name": "order.refund",
+                    "description": "Issue a full refund on an order.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "order_id": { "type": "string" },
+                            "amount":   { "type": "number" }
+                        }
+                    },
+                    "side_effects": ["write", "money", "irreversible"],
+                    "auth_required": true
+                },
+                {
+                    "name": "run_shell",
+                    "description": "Execute a shell command on the host.",
+                    "parameters": {},
+                    "side_effects": [],
+                    "auth_required": true
+                }
+            ]
+        }]
+    });
+    fs::write(&inventory, serde_json::to_string(&inv).unwrap()).unwrap();
+
+    // ── STEP 1: FIND ──────────────────────────────────────────────────────────
+    capframe()
+        .env("PATH", dir.path())
+        .args([
+            "find",
+            inventory.to_string_lossy().as_ref(),
+            "--out",
+            findings_out.to_string_lossy().as_ref(),
+            "--format",
+            "pretty",
+        ])
+        .assert()
+        .success();
+
+    let body = fs::read_to_string(&findings_out).expect("findings written");
+    let v: serde_json::Value = serde_json::from_str(&body).expect("findings JSON");
+    assert_eq!(
+        v["schema_version"], "capframe.findings.v1",
+        "find must emit findings.v1 envelope"
+    );
+    assert_eq!(
+        v["scanner"]["name"], "mcp-recon",
+        "scanner name must be mcp-recon"
+    );
+    // R7 fires on run_shell → Critical.
+    assert!(
+        v["summary"]["by_severity"]["critical"]
+            .as_u64()
+            .unwrap_or(0)
+            >= 1,
+        "R7 must fire on run_shell; summary: {}",
+        v["summary"]
+    );
+    // R4 fires on order.refund (unbounded numeric amount) → High.
+    assert!(
+        v["summary"]["by_severity"]["high"].as_u64().unwrap_or(0) >= 1,
+        "R4 must fire on order.refund; summary: {}",
+        v["summary"]
+    );
+    let ids: Vec<&str> = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["id"].as_str().unwrap_or(""))
+        .collect();
+    assert!(
+        ids.iter().any(|id| id.contains("r7")),
+        "must have an R7 finding; ids: {ids:?}"
+    );
+
+    // ── STEP 2: BIND ──────────────────────────────────────────────────────────
+    capframe()
+        .env("PATH", dir.path())
+        .args([
+            "bind",
+            "--agent",
+            "shopify-bot",
+            "--tools",
+            "order.refund",
+            "--limit",
+            "max_refund=100.00",
+            "--ttl",
+            "24h",
+        ])
+        .assert()
+        .success();
+
+    let bind_argv = fs::read_to_string(&argv_bind).expect("mock capnagent wrote argv");
+    assert!(
+        bind_argv.contains("shopify-bot"),
+        "agent name must reach capnagent; got: {bind_argv}"
+    );
+    assert!(
+        bind_argv.contains("order.refund"),
+        "tool list must reach capnagent; got: {bind_argv}"
+    );
+    assert!(
+        bind_argv.contains("max_refund=100.00"),
+        "limit must reach capnagent; got: {bind_argv}"
+    );
+    assert!(
+        bind_argv.contains("24h"),
+        "ttl must reach capnagent; got: {bind_argv}"
+    );
+
+    // ── STEP 3: GUARD evaluate ────────────────────────────────────────────────
+    capframe()
+        .env("PATH", dir.path())
+        .args([
+            "guard",
+            "evaluate",
+            "/tmp/policy.yaml",
+            "order.refund",
+            r#"{"order_id":"ord-123","amount":47.50}"#,
+        ])
+        .assert()
+        .success();
+
+    let guard_argv = fs::read_to_string(&argv_guard).expect("mock mcp-guard wrote argv");
+    assert!(
+        guard_argv.contains("evaluate"),
+        "evaluate subcommand must reach mcp-guard; got: {guard_argv}"
+    );
+    assert!(
+        guard_argv.contains("order.refund"),
+        "tool name must reach mcp-guard; got: {guard_argv}"
+    );
+    assert!(
+        guard_argv.contains("amount"),
+        "args must reach mcp-guard; got: {guard_argv}"
+    );
+    assert!(
+        guard_argv.contains("policy.yaml"),
+        "policy path must reach mcp-guard; got: {guard_argv}"
+    );
+}

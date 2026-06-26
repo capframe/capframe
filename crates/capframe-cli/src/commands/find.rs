@@ -228,22 +228,22 @@ fn translate_side_effect(s: mcp_recon_core::SideEffect) -> cff::SideEffect {
 }
 
 fn category_to_cast(c: mcp_recon_core::Category) -> Vec<cff::CastCategory> {
-    use mcp_recon_core::Category as M;
     use cff::CastCategory::*;
+    use mcp_recon_core::Category as M;
     match c {
-        M::ExcessiveAgency        => vec![Cast01],
-        M::IndirectInjection      => vec![Cast02],
-        M::UnconstrainedInput     => vec![Cast03],
-        M::MissingAuthz           => vec![Cast03],
+        M::ExcessiveAgency => vec![Cast01],
+        M::IndirectInjection => vec![Cast02],
+        M::UnconstrainedInput => vec![Cast03],
+        M::MissingAuthz => vec![Cast03],
         M::InsecureOutputHandling => vec![Cast01],
-        M::SecretExposure         => vec![Cast01],
-        M::SsrfSurface            => vec![Cast02],
-        M::FilesystemEgress       => vec![Cast01],
-        M::NetworkEgress          => vec![Cast02],
-        M::ToolNamingConflict     => vec![Cast04],
-        M::UntrustedDependency    => vec![Cast04],
-        M::Deserialization        => vec![Cast01],
-        M::Other                  => vec![],
+        M::SecretExposure => vec![Cast01],
+        M::SsrfSurface => vec![Cast02],
+        M::FilesystemEgress => vec![Cast01],
+        M::NetworkEgress => vec![Cast02],
+        M::ToolNamingConflict => vec![Cast04],
+        M::UntrustedDependency => vec![Cast04],
+        M::Deserialization => vec![Cast01],
+        M::Other => vec![],
     }
 }
 

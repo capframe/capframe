@@ -143,15 +143,24 @@ pub enum Severity {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CastCategory {
-    #[serde(rename = "CAST-01")] Cast01,
-    #[serde(rename = "CAST-02")] Cast02,
-    #[serde(rename = "CAST-03")] Cast03,
-    #[serde(rename = "CAST-04")] Cast04,
-    #[serde(rename = "CAST-05")] Cast05,
-    #[serde(rename = "CAST-06")] Cast06,
-    #[serde(rename = "CAST-07")] Cast07,
-    #[serde(rename = "CAST-08")] Cast08,
-    #[serde(rename = "CAST-09")] Cast09,
+    #[serde(rename = "CAST-01")]
+    Cast01,
+    #[serde(rename = "CAST-02")]
+    Cast02,
+    #[serde(rename = "CAST-03")]
+    Cast03,
+    #[serde(rename = "CAST-04")]
+    Cast04,
+    #[serde(rename = "CAST-05")]
+    Cast05,
+    #[serde(rename = "CAST-06")]
+    Cast06,
+    #[serde(rename = "CAST-07")]
+    Cast07,
+    #[serde(rename = "CAST-08")]
+    Cast08,
+    #[serde(rename = "CAST-09")]
+    Cast09,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

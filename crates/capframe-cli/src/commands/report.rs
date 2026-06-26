@@ -751,10 +751,7 @@ mod tests {
             f.cast_category = vec![CastCategory::Cast01, CastCategory::Cast03];
         }
         let html = render_html(&doc).into_string();
-        assert!(
-            html.contains("CAST-01"),
-            "report must render CAST-01 pill"
-        );
+        assert!(html.contains("CAST-01"), "report must render CAST-01 pill");
         assert!(html.contains("CAST-03"), "report must render CAST-03 pill");
     }
 
