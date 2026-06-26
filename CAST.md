@@ -193,7 +193,7 @@ CAST extends the existing frameworks. It does not replace them.
 
 | Capframe Module | CAST Categories | When it fires |
 |-----------------|-----------------|---------------|
-| **Find** (mcp-recon) | CAST-01, CAST-04 | Pre-integration — offline, deterministic classification of the tool surface |
+| **Find** (mcp-recon) | CAST-01, CAST-02, CAST-04 | Pre-integration — offline, deterministic classification of the tool surface |
 | **Bind** (capnagent) | CAST-03, CAST-05, CAST-09 | Issuance time — authority scoping and token integrity |
 | **Guard** (mcp-guard) | CAST-02, CAST-05, CAST-06, CAST-07, CAST-08, CAST-09 | Runtime — per-call enforcement at the tool-call boundary |
 
@@ -233,6 +233,7 @@ flowchart LR
     T5 --> C09
 
     C01 --> Find
+    C02 --> Find
     C04 --> Find
     C03 --> Bind
     C05 --> Bind
@@ -253,13 +254,16 @@ flowchart LR
 
 | R Rule | What it detects | Primary CAST | Secondary CAST |
 |--------|----------------|--------------|----------------|
-| R1 | String param with no `maxLength` | CAST-03 | CAST-08 |
+| R1 | String param with no `maxLength`, `enum`, or `pattern` | CAST-03 | CAST-08 |
 | R2 | Side-effects declared, no `auth_required` | CAST-03 | CAST-01 |
 | R3 | Tool name implies mutation not in declared side-effects | CAST-01 | CAST-03 |
 | R4 | Money/quota numeric param with no `maximum` | CAST-04 | CAST-08 |
 | R5 | Description mentions money, no money side-effect declared | CAST-01 | CAST-04 |
 | R6 | Description implies fetching external content | CAST-02 | CAST-06 |
 | R7 | Name/description implies code or command execution | CAST-01 | — |
+| R8 | URL / endpoint param with no `pattern` or `enum` (SSRF surface) | CAST-02 | CAST-06 |
+| R9 | Tool writes, creates, moves, or deletes files on the host filesystem | CAST-01 | CAST-07 |
+| R10 | Tool surfaces secrets, API keys, or credentials to the agent context | CAST-01 | CAST-06 |
 
 ---
 
@@ -287,14 +291,14 @@ Findings from `capframe find` carry CAST identifiers alongside existing framewor
 
 ```json
 {
-  "schema": "capframe/findings.v1",
+  "schema_version": "capframe.findings.v1",
   "findings": [
     {
       "rule_id": "R7",
       "severity": "critical",
       "tool": "execute_python_code",
       "message": "Tool name implies code or command execution",
-      "cast": ["CAST-01"],
+      "cast_category": ["CAST-01"],
       "owasp": ["LLM08"],
       "nist": ["MANAGE-1.3"],
       "atlas": ["T0051"]
@@ -304,7 +308,7 @@ Findings from `capframe find` carry CAST identifiers alongside existing framewor
       "severity": "medium",
       "tool": "fetch_url",
       "message": "Tool description implies fetching external web content",
-      "cast": ["CAST-02", "CAST-06"],
+      "cast_category": ["CAST-02", "CAST-06"],
       "owasp": ["LLM01"],
       "nist": ["MEASURE-2.3"],
       "atlas": ["T0051"]
@@ -333,7 +337,7 @@ Being explicit about scope is what separates a taxonomy from a marketing list:
 
 | Version | Status | Changes |
 |---------|--------|---------|
-| v0.1 | Current (draft) | Nine categories, R1–R7 mapped, findings.v1 schema extended |
+| v0.1 | Current (draft) | Nine categories, R1–R10 mapped, findings.v1 schema extended |
 | v0.2 | Planned | NIST AI RMF GenAI Profile (July 2024) mappings, CAST-09 hardened with real incidents |
 | v1.0 | Target | Stable category set, community review period, formal registration at capframe.ai/cast |
 
