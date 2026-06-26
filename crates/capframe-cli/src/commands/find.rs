@@ -150,7 +150,7 @@ fn translate_finding(f: &mcp_recon_core::Finding) -> cff::Finding {
         id: f.id.clone(),
         severity: translate_severity(f.severity),
         category: translate_category(f.category),
-        cast_category: vec![], // populated in Task 2 / category_to_cast
+        cast_category: category_to_cast(f.category),
         title: f.title.clone(),
         description: f.description.clone(),
         tool: f.tool.clone(),
@@ -224,6 +224,26 @@ fn translate_side_effect(s: mcp_recon_core::SideEffect) -> cff::SideEffect {
         M::Execute => cff::SideEffect::Execute,
         M::Money => cff::SideEffect::Money,
         M::Irreversible => cff::SideEffect::Irreversible,
+    }
+}
+
+fn category_to_cast(c: mcp_recon_core::Category) -> Vec<cff::CastCategory> {
+    use mcp_recon_core::Category as M;
+    use cff::CastCategory::*;
+    match c {
+        M::ExcessiveAgency        => vec![Cast01],
+        M::IndirectInjection      => vec![Cast02],
+        M::UnconstrainedInput     => vec![Cast03],
+        M::MissingAuthz           => vec![Cast03],
+        M::InsecureOutputHandling => vec![Cast01],
+        M::SecretExposure         => vec![Cast01],
+        M::SsrfSurface            => vec![Cast02],
+        M::FilesystemEgress       => vec![Cast01],
+        M::NetworkEgress          => vec![Cast02],
+        M::ToolNamingConflict     => vec![Cast04],
+        M::UntrustedDependency    => vec![Cast04],
+        M::Deserialization        => vec![Cast01],
+        M::Other                  => vec![],
     }
 }
 
@@ -301,6 +321,50 @@ mod tests {
             MCP_RECON_CORE_VERSION,
             "MCP_RECON_CORE_VERSION ({MCP_RECON_CORE_VERSION}) is out of sync with the \
              Cargo.toml git tag ({tag}); bump them together"
+        );
+    }
+
+    #[test]
+    fn translate_finding_emits_cast_for_excessive_agency() {
+        let core = mcp_recon_core::Finding {
+            id: "f-r4-test".into(),
+            severity: mcp_recon_core::Severity::High,
+            category: mcp_recon_core::Category::ExcessiveAgency,
+            title: "T".into(),
+            description: None,
+            tool: None,
+            remediation: None,
+            mappings: mcp_recon_core::Mappings::default(),
+        };
+        let out = translate_finding(&core);
+        assert!(
+            !out.cast_category.is_empty(),
+            "ExcessiveAgency must map to at least one CAST category"
+        );
+        assert!(
+            out.cast_category.contains(&cff::CastCategory::Cast01),
+            "ExcessiveAgency maps to CAST-01; got: {:?}",
+            out.cast_category
+        );
+    }
+
+    #[test]
+    fn translate_finding_emits_cast_for_indirect_injection() {
+        let core = mcp_recon_core::Finding {
+            id: "f-r6-test".into(),
+            severity: mcp_recon_core::Severity::Medium,
+            category: mcp_recon_core::Category::IndirectInjection,
+            title: "T".into(),
+            description: None,
+            tool: None,
+            remediation: None,
+            mappings: mcp_recon_core::Mappings::default(),
+        };
+        let out = translate_finding(&core);
+        assert!(
+            out.cast_category.contains(&cff::CastCategory::Cast02),
+            "IndirectInjection maps to CAST-02; got: {:?}",
+            out.cast_category
         );
     }
 
