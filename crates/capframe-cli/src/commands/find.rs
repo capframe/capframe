@@ -150,6 +150,7 @@ fn translate_finding(f: &mcp_recon_core::Finding) -> cff::Finding {
         id: f.id.clone(),
         severity: translate_severity(f.severity),
         category: translate_category(f.category),
+        cast_category: vec![], // populated in Task 2 / category_to_cast
         title: f.title.clone(),
         description: f.description.clone(),
         tool: f.tool.clone(),

@@ -17,6 +17,7 @@
       "id": "f-order-refund-unbounded",
       "severity": "high",
       "category": "excessive_agency",
+      "cast_category": ["CAST-01"],
       "title": "order.refund has no monetary cap",
       "description": "The order.refund tool accepts arbitrary amount values with no policy-side cap. An indirect-injection attack could trigger large refunds.",
       "tool": "order.refund",

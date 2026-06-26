@@ -104,6 +104,8 @@ pub struct Finding {
     pub id: String,
     pub severity: Severity,
     pub category: Category,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cast_category: Vec<CastCategory>,
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -137,6 +139,19 @@ pub enum Severity {
     Medium,
     High,
     Critical,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CastCategory {
+    #[serde(rename = "CAST-01")] Cast01,
+    #[serde(rename = "CAST-02")] Cast02,
+    #[serde(rename = "CAST-03")] Cast03,
+    #[serde(rename = "CAST-04")] Cast04,
+    #[serde(rename = "CAST-05")] Cast05,
+    #[serde(rename = "CAST-06")] Cast06,
+    #[serde(rename = "CAST-07")] Cast07,
+    #[serde(rename = "CAST-08")] Cast08,
+    #[serde(rename = "CAST-09")] Cast09,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -212,6 +227,39 @@ mod tests {
         let back = serde_json::to_string(&parsed).expect("reserialize");
         let reparsed: Findings = serde_json::from_str(&back).expect("re-parse");
         assert_eq!(reparsed.summary.total, parsed.summary.total);
+    }
+
+    #[test]
+    fn cast_category_round_trips() {
+        let f = Finding {
+            id: "f-test".into(),
+            severity: Severity::High,
+            category: Category::ExcessiveAgency,
+            cast_category: vec![CastCategory::Cast01, CastCategory::Cast06],
+            title: "Test".into(),
+            description: None,
+            tool: None,
+            evidence: None,
+            remediation: None,
+            mappings: Mappings::default(),
+            first_seen: None,
+            last_seen: None,
+        };
+        let json = serde_json::to_string(&f).expect("serialize");
+        assert!(json.contains("\"CAST-01\""), "got: {json}");
+        assert!(json.contains("\"CAST-06\""), "got: {json}");
+        let back: Finding = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.cast_category.len(), 2);
+    }
+
+    #[test]
+    fn cast_category_defaults_when_absent() {
+        let json = r#"{
+            "id":"f-old","severity":"high","category":"excessive_agency",
+            "title":"Old finding"
+        }"#;
+        let f: Finding = serde_json::from_str(json).expect("deserialize without cast_category");
+        assert!(f.cast_category.is_empty());
     }
 
     #[test]

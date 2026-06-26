@@ -116,6 +116,15 @@
       ]
     },
 
+    "CastCategory": {
+      "type": "string",
+      "description": "CAST v0.1 risk category (Capframe Agent Security Taxonomy).",
+      "enum": [
+        "CAST-01", "CAST-02", "CAST-03", "CAST-04", "CAST-05",
+        "CAST-06", "CAST-07", "CAST-08", "CAST-09"
+      ]
+    },
+
     "Tool": {
       "type": "object",
       "required": ["name"],
@@ -145,6 +154,11 @@
         "id":          { "type": "string", "description": "stable hash, suitable for diffing across scans" },
         "severity":    { "$ref": "#/$defs/Severity" },
         "category":    { "$ref": "#/$defs/Category" },
+        "cast_category": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CastCategory" },
+          "uniqueItems": true
+        },
         "title":       { "type": "string", "maxLength": 200 },
         "description": { "type": "string" },
         "tool":        { "type": "string", "description": "name of the tool this finding relates to, if any" },
