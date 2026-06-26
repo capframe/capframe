@@ -118,6 +118,7 @@ fn build_envelope(
         + by_severity.medium
         + by_severity.high
         + by_severity.critical;
+    let by_category = category_counts(&findings);
 
     cff::Findings {
         schema_version: cff::SCHEMA_VERSION.to_string(),
@@ -139,7 +140,7 @@ fn build_envelope(
         summary: cff::Summary {
             total,
             by_severity,
-            by_category: BTreeMap::new(),
+            by_category,
             mappings: cff::Mappings::default(),
         },
     }
@@ -261,6 +262,18 @@ fn severity_counts(findings: &[cff::Finding]) -> cff::SeverityCounts {
     c
 }
 
+fn category_counts(findings: &[cff::Finding]) -> BTreeMap<String, u32> {
+    let mut map = BTreeMap::new();
+    for f in findings {
+        let key = serde_json::to_value(f.category)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_else(|| "other".to_string());
+        *map.entry(key).or_default() += 1;
+    }
+    map
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,6 +312,21 @@ mod tests {
         assert!(env.findings.iter().any(|f| f.id.contains("r7")));
         assert_eq!(env.summary.by_severity.critical, 1);
         assert_eq!(env.summary.total, 1);
+        // by_category must be populated, not an empty map.
+        assert!(
+            !env.summary.by_category.is_empty(),
+            "by_category must not be empty when there are findings"
+        );
+        assert_eq!(
+            env.summary
+                .by_category
+                .get("excessive_agency")
+                .copied()
+                .unwrap_or(0),
+            1,
+            "R7 maps to excessive_agency; by_category: {:?}",
+            env.summary.by_category
+        );
     }
 
     #[test]
