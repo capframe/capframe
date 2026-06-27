@@ -128,6 +128,17 @@ fn supersedes(cand: &Row, cur: &Row) -> bool {
         > (cur.last_scanned, source_rank(cur.source), cur.tool_count)
 }
 
+/// The version-independent identity of a server: its handle with the trailing
+/// `@<version>` stripped (`npm:firecrawl-mcp@3.20.2` -> `npm:firecrawl-mcp`).
+/// Two scans of the same package at different versions — a stale registry pin
+/// and a fresh sandbox pin — share a package key and collapse to one row;
+/// `supersedes` then keeps the newer/richer scan. Scoped npm names are safe:
+/// only the LAST `@` (the version delimiter) is split, so the leading `@scope/`
+/// is preserved. A handle with no `@` is its own key.
+fn package_key(handle: &str) -> &str {
+    handle.rsplit_once('@').map_or(handle, |(pkg, _ver)| pkg)
+}
+
 /// Tally severity counts directly from the findings array — the source of
 /// truth for the public score, since findings[] is exactly what the per-server
 /// detail view renders.
@@ -181,12 +192,15 @@ fn row_from(doc: FindingsV2) -> Row {
 /// one malformed file doesn't tank the whole leaderboard.
 pub fn build(dir: &Path, now: OffsetDateTime) -> Result<Leaderboard> {
     let entries = fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))?;
-    // Aggregate by handle so two files that resolve to the same server (a stale
+    // Aggregate by package identity (handle minus its `@<version>`) so two
+    // files that resolve to the same server collapse to one row: a stale
     // registry slug + a fresh sandbox slug, a slugging change between producer
-    // versions) collapse to one row instead of emitting duplicate keys the
-    // downstream `/leaderboard` page cannot disambiguate. Map order is
-    // deterministic, so the result no longer depends on read_dir order.
-    let mut by_handle: BTreeMap<String, Row> = BTreeMap::new();
+    // versions, OR the same package pinned at different versions across the
+    // registry and sandbox corpora (the firecrawl-mcp 3.20.1-vs-3.20.2 case).
+    // Keying on the bare handle left those last ones as two contradicting rows.
+    // Map order is deterministic, so the result no longer depends on read_dir
+    // order.
+    let mut by_pkg: BTreeMap<String, Row> = BTreeMap::new();
     let mut bad = 0_usize;
     for entry in entries {
         let entry = entry?;
@@ -209,21 +223,24 @@ pub fn build(dir: &Path, now: OffsetDateTime) -> Result<Leaderboard> {
         match parse_one(&path) {
             Ok(doc) => {
                 let row = row_from(doc);
-                match by_handle.get(&row.handle) {
+                let key = package_key(&row.handle).to_string();
+                match by_pkg.get(&key) {
                     Some(cur) if !supersedes(&row, cur) => {
                         tracing::warn!(
                             handle = %row.handle,
-                            "duplicate handle; kept earlier higher-precedence scan",
+                            kept = %cur.handle,
+                            "duplicate package; kept earlier higher-precedence scan",
                         );
                     }
                     existing => {
-                        if existing.is_some() {
+                        if let Some(cur) = existing {
                             tracing::warn!(
                                 handle = %row.handle,
-                                "duplicate handle; superseded earlier scan",
+                                superseded = %cur.handle,
+                                "duplicate package; superseded earlier scan",
                             );
                         }
-                        by_handle.insert(row.handle.clone(), row);
+                        by_pkg.insert(key, row);
                     }
                 }
             }
@@ -237,7 +254,7 @@ pub fn build(dir: &Path, now: OffsetDateTime) -> Result<Leaderboard> {
             }
         }
     }
-    let mut rows: Vec<Row> = by_handle.into_values().collect();
+    let mut rows: Vec<Row> = by_pkg.into_values().collect();
     if rows.is_empty() {
         // Fail closed: a run that produced zero rows is an error, never a
         // successful empty board. When files were present but every one failed
@@ -334,5 +351,28 @@ mod tests {
     fn mixed_severities_sum_correctly() {
         // 1*10 + 2*4 + 3*2 + 4*1 = 28 -> score 72
         assert_eq!(score_from_counts(&counts(1, 2, 3, 4, 0)), 72);
+    }
+
+    #[test]
+    fn package_key_strips_version_only() {
+        // plain name
+        assert_eq!(package_key("npm:firecrawl-mcp@3.20.2"), "npm:firecrawl-mcp");
+        // two versions of one package share a key
+        assert_eq!(
+            package_key("npm:firecrawl-mcp@3.20.1"),
+            package_key("npm:firecrawl-mcp@3.20.2"),
+        );
+        // scoped npm name: the leading @scope/ must survive, only the version @ splits
+        assert_eq!(
+            package_key("npm:@apify/actors-mcp-server@0.10.11"),
+            "npm:@apify/actors-mcp-server",
+        );
+        // distinct packages keep distinct keys
+        assert_ne!(
+            package_key("npm:alpha@1.0.0"),
+            package_key("npm:beta@1.0.0"),
+        );
+        // no version -> handle is its own key
+        assert_eq!(package_key("npm:firecrawl-mcp"), "npm:firecrawl-mcp");
     }
 }
