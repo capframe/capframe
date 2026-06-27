@@ -324,7 +324,7 @@ fn render_html(doc: &FindingsV2) -> Markup {
 
     // findings ordered by severity, worst first
     let mut findings: Vec<&Finding> = doc.findings.iter().collect();
-    findings.sort_by(|a, b| b.severity.cmp(&a.severity));
+    findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
 
     let agg = aggregate_mappings(doc);
     let has_cov =
