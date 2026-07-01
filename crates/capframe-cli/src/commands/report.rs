@@ -286,6 +286,30 @@ fn map_pills(m: &Mappings) -> Markup {
     }
 }
 
+/// Unique CAST categories across all findings, first-seen order — the CAST coverage
+/// for the summary line (per-finding CAST pills are rendered separately below each finding).
+fn aggregate_cast(doc: &FindingsV2) -> Vec<CastCategory> {
+    let mut out = Vec::new();
+    for f in &doc.findings {
+        for c in &f.cast_category {
+            if !out.contains(c) {
+                out.push(*c);
+            }
+        }
+    }
+    out
+}
+
+/// Render the aggregated CAST group for the summary coverage line, styled to match
+/// the OWASP/NIST/ATLAS groups so the audit artifact reads OWASP / NIST / ATLAS / CAST.
+fn cast_pills(cats: &[CastCategory]) -> Markup {
+    html! {
+        @if !cats.is_empty() {
+            span.mapgroup { span.maplabel { "CAST" } @for c in cats { span.pill.cast-pill { (cast_label(*c)) } } }
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 // render
 // ----------------------------------------------------------------------------
@@ -327,6 +351,7 @@ fn render_html(doc: &FindingsV2) -> Markup {
     findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
 
     let agg = aggregate_mappings(doc);
+    let agg_cast = aggregate_cast(doc);
     let has_cov =
         !agg.owasp_llm.is_empty() || !agg.nist_rmf.is_empty() || !agg.mitre_atlas.is_empty();
 
@@ -396,7 +421,7 @@ fn render_html(doc: &FindingsV2) -> Markup {
                 @if has_cov {
                     section {
                         h2 { "Compliance coverage" }
-                        div.cov.maps-inline { (map_pills(&agg)) }
+                        div.cov.maps-inline { (map_pills(&agg)) (cast_pills(&agg_cast)) }
                     }
                 }
 
@@ -753,6 +778,22 @@ mod tests {
         let html = render_html(&doc).into_string();
         assert!(html.contains("CAST-01"), "report must render CAST-01 pill");
         assert!(html.contains("CAST-03"), "report must render CAST-03 pill");
+    }
+
+    #[test]
+    fn aggregates_cast_in_coverage_summary() {
+        // The summary coverage line must read OWASP / NIST / ATLAS / CAST — the
+        // CAST group there uses the .maplabel class (per-finding CAST uses .castlabel).
+        let body = include_str!("../../../../schemas/findings.example.json");
+        let mut doc = load(body).expect("load v1 example");
+        if let Some(f) = doc.findings.first_mut() {
+            f.cast_category = vec![CastCategory::Cast01, CastCategory::Cast03];
+        }
+        let html = render_html(&doc).into_string();
+        assert!(
+            html.contains(r#"class="maplabel">CAST"#),
+            "coverage summary must aggregate a CAST group alongside OWASP/NIST/ATLAS"
+        );
     }
 
     #[test]
