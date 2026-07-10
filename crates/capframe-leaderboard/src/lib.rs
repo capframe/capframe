@@ -132,11 +132,20 @@ fn supersedes(cand: &Row, cur: &Row) -> bool {
 /// `@<version>` stripped (`npm:firecrawl-mcp@3.20.2` -> `npm:firecrawl-mcp`).
 /// Two scans of the same package at different versions — a stale registry pin
 /// and a fresh sandbox pin — share a package key and collapse to one row;
-/// `supersedes` then keeps the newer/richer scan. Scoped npm names are safe:
-/// only the LAST `@` (the version delimiter) is split, so the leading `@scope/`
-/// is preserved. A handle with no `@` is its own key.
+/// `supersedes` then keeps the newer/richer scan. A handle with no `@` is its
+/// own key.
+///
+/// The trailing `@` counts as a version delimiter only when the text after it
+/// contains no `/`. A version token never has a path separator, but a leading
+/// npm `@scope/name` does (as does a `user@host/path`-style handle) — so a
+/// scoped package with no version (`npm:@apify/actors-mcp-server`) is preserved
+/// whole instead of collapsing to `npm:` and merging with every other scoped
+/// package.
 fn package_key(handle: &str) -> &str {
-    handle.rsplit_once('@').map_or(handle, |(pkg, _ver)| pkg)
+    match handle.rsplit_once('@') {
+        Some((pkg, ver)) if !ver.contains('/') => pkg,
+        _ => handle,
+    }
 }
 
 /// Tally severity counts directly from the findings array — the source of
@@ -374,5 +383,28 @@ mod tests {
         );
         // no version -> handle is its own key
         assert_eq!(package_key("npm:firecrawl-mcp"), "npm:firecrawl-mcp");
+    }
+
+    #[test]
+    fn package_key_preserves_scoped_name_without_version() {
+        // A scoped npm name with no version has only the scope `@`, which is
+        // NOT a version delimiter, so the whole handle is its own key.
+        // Regression: the naive rsplit collapsed this to "npm:", silently
+        // merging every unrelated scoped package into one leaderboard row.
+        assert_eq!(
+            package_key("npm:@apify/actors-mcp-server"),
+            "npm:@apify/actors-mcp-server",
+        );
+        // Two different scoped packages without versions must NOT collide.
+        assert_ne!(
+            package_key("npm:@apify/actors-mcp-server"),
+            package_key("npm:@modelcontextprotocol/server-github"),
+        );
+        // A handle whose trailing `@` is followed by a path (`/`) is not a
+        // version — it's preserved, so URL-ish handles aren't mangled.
+        assert_eq!(
+            package_key("http:host@example.org/mcp"),
+            "http:host@example.org/mcp",
+        );
     }
 }
