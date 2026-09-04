@@ -132,21 +132,25 @@ capframe report --findings capframe.findings.json --format pdf  --out report.pdf
 4. **Report** rolls findings (and, on the roadmap, token grants + Guard logs) into an HTML / PDF audit document.
 
 
-CAST — Capframe Agent Security Taxonomy
-Capframe introduces CAST (Capframe Agent Security Taxonomy), a set of risk categories specifically designed for tool-using AI agents.
-CAST defines 8 core risk categories that go beyond traditional LLM frameworks, including:
+## CAST — Capframe Agent Security Taxonomy
 
-Tool Capability Excess
-Indirect Injection via Tool Output
-Insufficient Capability Scoping
-Tool Metadata Poisoning
-Capability Boundary Violation
-Cross-Tool Propagation
-Persistent State Poisoning
-Uncontrolled Tool Invocation
+Capframe introduces **CAST** (Capframe Agent Security Taxonomy), a set of risk categories designed specifically for tool-using AI agents. CAST defines **9 categories** that only exist when an AI is calling tools — each mapped to a concrete Capframe module. CAST extends the existing frameworks (OWASP-LLM, NIST-RMF, MITRE ATLAS); it does not replace them.
 
-→ View full CAST documentation
-Each CAST category maps directly to Capframe’s modules, making the taxonomy actionable rather than theoretical.
+|  | Category | Module |
+|---|---|---|
+| **CAST-01** | Tool Capability Excess | Find |
+| **CAST-02** | Indirect Injection via Tool Output | Guard |
+| **CAST-03** | Insufficient Capability Scoping | Bind |
+| **CAST-04** | Tool Metadata Poisoning | Find |
+| **CAST-05** | Capability Boundary Violation | Bind |
+| **CAST-06** | Cross-Tool Propagation | Guard |
+| **CAST-07** | Persistent State Poisoning | Guard |
+| **CAST-08** | Uncontrolled Tool Invocation | Guard |
+| **CAST-09** | Multi-Agent Authority Delegation | Bind + Guard |
+
+**→ [Full CAST documentation](./CAST.md)** &nbsp;·&nbsp; also published at [capframe.ai/cast](https://capframe.ai/cast)
+
+Each CAST category maps directly to a Capframe module, making the taxonomy actionable rather than theoretical — and `capframe report` tags every finding with its CAST category alongside OWASP / NIST / ATLAS.
 
 
 ## Security posture

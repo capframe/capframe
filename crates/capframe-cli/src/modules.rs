@@ -33,7 +33,9 @@ impl Module {
     pub fn version_req(self) -> &'static str {
         match self {
             Module::Find => ">=0.0.1, <0.1.0",
-            Module::Bind => ">=0.7.0, <0.8.0",
+            // 0.8 and 0.9 kept the flat `--agent/--tools/--limit/--ttl`
+            // invocation this CLI dispatches; 0.9's additions are subcommands.
+            Module::Bind => ">=0.7.0, <0.10.0",
             Module::Guard => ">=0.5.0, <0.6.0",
         }
     }
@@ -198,5 +200,44 @@ mod tests {
             &req,
             &semver::Version::parse("0.5.0-rc.1").unwrap()
         ));
+    }
+
+    /// Each module's declared band must accept the version we actually ship.
+    ///
+    /// capnagent 0.9.0 kept the flat `--agent/--tools/--limit/--ttl` shape
+    /// that `capframe bind` dispatches (see its CHANGELOG: "the legacy flat
+    /// invocation ... is unchanged"), but the band was never bumped past
+    /// 0.8.0 — so the gate rejected a wire-compatible binary and `bind` was
+    /// unreachable. Pin the shipped versions here so a band and its module
+    /// can't drift apart silently again.
+    #[test]
+    fn bands_accept_the_currently_shipped_module_versions() {
+        for (m, shipped) in [
+            (Module::Find, "0.0.13"),
+            (Module::Bind, "0.9.0"),
+            (Module::Guard, "0.5.6"),
+        ] {
+            let req = semver::VersionReq::parse(m.version_req()).unwrap();
+            let v = semver::Version::parse(shipped).unwrap();
+            assert!(
+                version_in_band(&req, &v),
+                "band `{}` for `{}` rejects shipped version {shipped}",
+                m.version_req(),
+                m.underlying_binary(),
+            );
+        }
+    }
+
+    /// Widening a band must not make it unbounded — the next major/minor
+    /// series may break the CLI shape, and that has to fail closed.
+    #[test]
+    fn bind_band_still_rejects_out_of_band_versions() {
+        let req = semver::VersionReq::parse(Module::Bind.version_req()).unwrap();
+        for bad in ["0.6.9", "0.10.0", "1.0.0"] {
+            assert!(
+                !version_in_band(&req, &semver::Version::parse(bad).unwrap()),
+                "bind band must reject {bad}",
+            );
+        }
     }
 }

@@ -213,6 +213,60 @@ fn duplicate_handles_collapse_to_newest_scan() {
 }
 
 #[test]
+fn duplicate_package_different_versions_collapse_to_newest() {
+    // The real-world case the leaderboard hit: the registry corpus pins a
+    // package at one version (a shallow static scan) while the sandbox corpus
+    // pins the SAME package at a newer version (a deep live scan). Those handles
+    // differ only in the trailing `@<version>`, so a handle-keyed dedup leaves
+    // two contradicting rows on the board (e.g. firecrawl-mcp@3.20.1 at 94 next
+    // to firecrawl-mcp@3.20.2 at 0). They must collapse to ONE row keyed on the
+    // version-independent package identity, with the newer/richer scan winning.
+    let dir = TempDir::new().unwrap();
+    let doc = |slug: &str, handle: &str, scanned_at: &str, source: &str, findings: &str| {
+        let body = format!(
+            r#"{{
+                "schema_version":"capframe.findings.v2",
+                "scan_id":"00000000-0000-0000-0000-000000000000",
+                "scanned_at":"{scanned_at}",
+                "scanner":{{"name":"x","version":"0.0.0"}},
+                "server":{{"handle":"{handle}","kind":"mcp_server","source":"{source}"}},
+                "findings":{findings},
+                "summary":{{"total":0,"by_severity":{{"info":0,"low":0,"medium":0,"high":0,"critical":0}}}}
+            }}"#,
+        );
+        fs::write(dir.path().join(format!("{slug}.findings.v2.json")), body).unwrap();
+    };
+    // older registry scan of 3.20.1: one critical -> score 90
+    doc(
+        "registry-slug",
+        "npm:firecrawl-mcp@3.20.1",
+        "2026-06-27T09:21:24Z",
+        "registry",
+        r#"[{"id":"f1","severity":"critical","category":"excessive_agency","title":"t"}]"#,
+    );
+    // newer sandbox scan of 3.20.2: clean -> score 100
+    doc(
+        "sandbox-slug",
+        "npm:firecrawl-mcp@3.20.2",
+        "2026-06-27T09:23:58Z",
+        "sandbox",
+        "[]",
+    );
+
+    let board = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap();
+    assert_eq!(
+        board.total_scanned, 1,
+        "same package at two versions must collapse to one row"
+    );
+    let row = &board.rows[0];
+    assert_eq!(
+        row.handle, "npm:firecrawl-mcp@3.20.2",
+        "the newer sandbox scan's handle (and version) should be the surviving row"
+    );
+    assert_eq!(row.score, SCORE_MAX, "newer (sandbox) scan should win");
+}
+
+#[test]
 fn non_regular_findings_entry_is_counted_not_silently_dropped() {
     // A *directory* (or symlink) named like a findings file must be counted as
     // skipped and surfaced, not silently dropped so the dir looks empty.

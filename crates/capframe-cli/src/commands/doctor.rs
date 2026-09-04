@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::modules::{binary_version, resolve, version_in_band, Module};
+use crate::modules::{binary_version, resolve, resolve_compatible, Module};
 
 /// Health of one module binary as observed by `doctor`.
 enum Health {
@@ -38,20 +38,18 @@ fn health(m: Module) -> Health {
         Ok(v) => v,
         Err(e) => return Health::Unreadable(e.to_string()),
     };
-    let req = match semver::VersionReq::parse(m.version_req()) {
-        Ok(r) => r,
-        Err(e) => return Health::Unreadable(e.to_string()),
-    };
-    if version_in_band(&req, &version) {
-        Health::Ok {
-            version: version.to_string(),
-            path: bin.display().to_string(),
-        }
-    } else {
-        Health::Incompatible {
+    // Delegate compat check to resolve_compatible so the gate is identical
+    // to dispatch(). If the two diverged, doctor could report OK on a binary
+    // that dispatch() would reject.
+    if resolve_compatible(m).is_err() {
+        return Health::Incompatible {
             version: version.to_string(),
             req: m.version_req().to_string(),
-        }
+        };
+    }
+    Health::Ok {
+        version: version.to_string(),
+        path: bin.display().to_string(),
     }
 }
 
