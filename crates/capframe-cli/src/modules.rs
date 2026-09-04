@@ -210,12 +210,20 @@ mod tests {
     /// 0.8.0 — so the gate rejected a wire-compatible binary and `bind` was
     /// unreachable. Pin the shipped versions here so a band and its module
     /// can't drift apart silently again.
+    ///
+    /// These are hand-maintained constants, so this test is a lagging check —
+    /// it only notices drift once someone updates the pin (Guard sat at 0.5.6
+    /// against a 0.5.7 release). `scripts/check_module_bands.py`, run weekly by
+    /// `.github/workflows/module-bands.yml`, is the leading one: it resolves
+    /// the shipped versions live from GitHub Releases and PyPI. Keep both —
+    /// this runs offline on every push, that one catches releases made
+    /// elsewhere.
     #[test]
     fn bands_accept_the_currently_shipped_module_versions() {
         for (m, shipped) in [
             (Module::Find, "0.0.13"),
             (Module::Bind, "0.9.0"),
-            (Module::Guard, "0.5.6"),
+            (Module::Guard, "0.5.7"),
         ] {
             let req = semver::VersionReq::parse(m.version_req()).unwrap();
             let v = semver::Version::parse(shipped).unwrap();

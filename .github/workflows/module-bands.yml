@@ -1,0 +1,42 @@
+name: module-bands
+
+# `capframe bind` was unreachable in production for an unknown window because
+# the Bind band said `<0.8.0` while capnagent shipped 0.9.0. Nothing caught it:
+# the unit test pins bands against a hand-maintained constant, so it only
+# notices drift once someone remembers to update the constant (it was already
+# stale again — Guard pinned 0.5.6 against a 0.5.7 release).
+#
+# This resolves what each module ACTUALLY ships, from every channel a user can
+# install from, and fails if any of them falls outside its band. A module can
+# publish a release without touching this repo, which is why this is scheduled
+# and not only push-gated.
+
+on:
+  schedule:
+    # Weekly, Monday 08:00 UTC — an hour after the leaderboard cron so the two
+    # don't contend, and early enough in the week to act on a red result.
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+  # A band edit is the exact moment this is most likely to be wrong, so gate
+  # those changes too rather than waiting up to a week to find out.
+  push:
+    branches: [main]
+    paths: ["crates/capframe-cli/src/modules.rs", "scripts/check_module_bands.py"]
+  pull_request:
+    paths: ["crates/capframe-cli/src/modules.rs", "scripts/check_module_bands.py"]
+
+permissions:
+  contents: read
+
+jobs:
+  bands:
+    name: shipped versions are in band
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Check bands against live registries
+        run: python3 scripts/check_module_bands.py
