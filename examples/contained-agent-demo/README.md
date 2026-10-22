@@ -7,7 +7,7 @@
 >
 > **What it proves:** Identical agent, identical model, identical
 > hostile payload. Without Capframe: a **current frontier model
-> (claude-sonnet-4) issues a fraudulent 4950 USD refund to the
+> (claude-sonnet-5-5) issues a fraudulent 4950 USD refund to the
 > attacker.** With Capframe: the identical call is denied at the gate,
 > no damage. Decision time on a 4-rule policy: **~10–60μs per call**
 > (measured, see below).
@@ -57,12 +57,29 @@ flag. The true order was **47.50 EUR to alice.legitcustomer@example.com**
 4950 USD to an attacker-controlled address. A well-behaved agent
 faithfully refunds what its data source tells it to — and that is the
 compromise. We measured this rather than asserting it: across 15 trials,
-`claude-sonnet-4` complied with the poisoned context **15/15 (100%)** in
+`claude-sonnet-5-5` complied with the poisoned context **15/15 (100%)** in
 this run (see `run_compliance_trials.py` and
-`logs/compliance_trials.log`). Compliance is model- and run-dependent —
-the same model resists the cruder "[SYSTEM OVERRIDE]" injection outright —
-so treat the rate as illustrative, not a fixed constant. What is *not*
-probabilistic: Guard blocked all 15 fraudulent calls, leaking zero.
+`logs/trials-sonnet-5-5.log`).
+
+Compliance is model- and run-dependent, and the spread across models is
+large. Measured 2026-10-23, 15 trials each, zero errors and zero
+safeguard refusals:
+
+| Model | Complied | Declined | Guard blocked |
+|---|---|---|---|
+| `claude-sonnet-5-5` | **15/15 (100%)** | 0/15 | 15/15 |
+| `claude-opus-5-5` | **4/15 (27%)** | 11/15 | 4/4 |
+
+Opus 5.5 resists this attack most of the time — but not reliably, and
+"most of the time" is not a security control. The same model also
+resists the cruder "[SYSTEM OVERRIDE]" injection outright. Treat every
+rate here as illustrative of a moving target, not a fixed constant: it
+changes with each model release, and n=15 gives it a wide confidence
+interval either way.
+
+What is *not* probabilistic: Guard blocked **every** fraudulent call on
+both models — 15/15 and 4/4 — leaking zero. That is the number the
+product rests on.
 
 ## The three runs
 
@@ -72,8 +89,8 @@ Agent gets the message. Agent decides what tool to call. The call
 goes straight to the refund API.
 
 **Result:** Whatever the LLM decides, happens. The defense is
-probabilistic. The demo defaults to `claude-sonnet-4-20250514` — a
-current frontier model — and it **complies with the poisoned data**: it
+probabilistic. The demo defaults to `claude-sonnet-5-5` — the
+current Sonnet — and it **complies with the poisoned data**: it
 issues 4950.00 USD to `alice.payouts.verified@mailflow-secure.com`.
 Money moves. (Captured in `logs/uncontained.log`.) The model isn't
 jailbroken and isn't dumb — it read its trusted data source and did
@@ -170,7 +187,7 @@ cd examples/contained-agent-demo
 # The structural argument (no LLM, no API key needed)
 python run_simulated_compromise.py
 
-# The live-LLM baseline. Defaults to claude-sonnet-4-20250514, which
+# The live-LLM baseline. Defaults to claude-sonnet-5-5, which
 # complies with the poisoned context and issues the fraudulent refund.
 python run_uncontained.py
 
@@ -178,7 +195,7 @@ python run_uncontained.py
 python run_contained.py
 
 # Optional: try a different model.
-$env:DEMO_MODEL = "claude-opus-4-20250514"; python run_uncontained.py
+$env:DEMO_MODEL = "claude-opus-5-5"; python run_uncontained.py
 ```
 
 Each script writes its full transcript to `logs/<run-name>.log` for

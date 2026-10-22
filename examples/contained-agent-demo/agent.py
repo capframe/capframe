@@ -29,13 +29,24 @@ import anthropic
 
 
 # The model both live runs use. The attack in refund_api.py is a
-# poisoned-data attack, which current frontier models comply with
-# (verified on this account against claude-sonnet-4 and claude-haiku-4-5,
-# both issue the fraudulent refund). We default to a current model on
-# purpose: the point is NOT "old models are dumb" — it is that even a
-# capable, up-to-date model gets compromised when its data source is
-# poisoned. Override with DEMO_MODEL to try any other model id.
-DEFAULT_MODEL = os.environ.get("DEMO_MODEL", "claude-sonnet-4-20250514")
+# poisoned-data attack. We default to a current model on purpose: the
+# point is NOT "old models are dumb" — it is that a capable, up-to-date
+# model still gets compromised when its data source is poisoned.
+#
+# Measured on this account, 15 trials per model (2026-10-23), zero
+# errors and zero safeguard refusals:
+#
+#   claude-sonnet-5-5  15/15 complied (100%)
+#   claude-opus-5-5     4/15 complied  (27%), 11/15 declined
+#
+# Earlier runs: claude-sonnet-4 and claude-haiku-4-5 both complied.
+#
+# Opus 5.5 resists most of the time but not reliably, which is the
+# honest shape of the argument: compliance is probabilistic and moves
+# with every model release, so it is not a control. The capability gate
+# is deterministic and blocked 100% of the attempts that got through on
+# both models. Override with DEMO_MODEL to try any other model id.
+DEFAULT_MODEL = os.environ.get("DEMO_MODEL", "claude-sonnet-5-5")
 
 
 SYSTEM_PROMPT = """\
