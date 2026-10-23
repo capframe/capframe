@@ -52,12 +52,40 @@ env:
   # Per-container wall-clock budget for the sandbox handshake (npm
   # install + initialize + tools/list). Keep generous; large packages
   # can install slowly inside the runner.
-  SANDBOX_TIMEOUT_SECS: "240"
+  #
+  # Raised 240 -> 600 on 2026-10-23 for ONE server:
+  # @executeautomation/playwright-mcp-server@1.0.12, whose npm install
+  # alone measures 191s (it pulls browser binaries) and which fails at
+  # 240s but completes at 600s.
+  #
+  # firecrawl-mcp@3.34.1 also looked like a timeout victim and is NOT:
+  # it was hitting a pipe deadlock in the mcp-recon sandbox producer,
+  # which never drained the child's stdout. Its ~83 KiB tools/list
+  # filled the pipe buffer, so the container could not exit and every
+  # budget expired. Fixed in mcp-recon (`spawn_drain_wait`); firecrawl
+  # now scans clean at 240s. No timeout value would have fixed it.
+  #
+  # This cron therefore needs an mcp-recon that includes that fix — see
+  # MCP_RECON_REF below, which tracks master.
+  SANDBOX_TIMEOUT_SECS: "600"
+  # Base image for npm sandbox entries. node:20 is now too old for a
+  # growing share of the corpus — obsidian-mcp@2.x and
+  # @apify/actors-mcp-server@0.19.x both exit 7 ("Please update
+  # Node.js") before the handshake, so they silently fell out of the
+  # leaderboard. Bump deliberately rather than tracking `node:latest`,
+  # which would make runs non-reproducible.
+  SANDBOX_NPM_IMAGE: node:22
 
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Raised 45 -> 90 on 2026-10-22 alongside SANDBOX_TIMEOUT_SECS. A
+    # typical run is 10-20 min, but the sandbox corpus is 31 entries and
+    # each now gets up to 600s, so a few slow installs could previously
+    # push the job past its wall. That failure mode is silent and total:
+    # the cross-repo push step never runs, so the public leaderboard just
+    # keeps serving yesterday's sample.json with no error surfaced.
+    timeout-minutes: 90
     steps:
       - name: Checkout capframe (this repo)
         uses: actions/checkout@v7
@@ -112,7 +140,7 @@ jobs:
       - name: Verify Docker is available
         run: |
           docker --version
-          docker pull node:20
+          docker pull "${{ env.SANDBOX_NPM_IMAGE }}"
 
       - name: Run producer (sandbox path, npm only)
         working-directory: mcp-recon
@@ -120,6 +148,7 @@ jobs:
           ./target/release/mcp-recon producer sandbox \
             "${{ env.SANDBOX_CORPUS_PATH }}" \
             --out-dir ../findings \
+            --image "${{ env.SANDBOX_NPM_IMAGE }}" \
             --timeout-secs "${{ env.SANDBOX_TIMEOUT_SECS }}" \
             --pretty
           echo "--- post-sandbox findings (slug -> source) ---"
