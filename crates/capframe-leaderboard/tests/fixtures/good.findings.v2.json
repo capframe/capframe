@@ -11,7 +11,9 @@
     "name": "good-server",
     "transport": "stdio"
   },
-  "tools": [],
+  "tools": [
+    { "name": "get_profile", "description": "Return the authenticated user profile." }
+  ],
   "findings": [],
   "summary": {
     "total": 0,
