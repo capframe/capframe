@@ -165,6 +165,19 @@ fn counts_from_findings(findings: &[Finding]) -> SeverityCounts {
     c
 }
 
+/// True when a scan saw nothing a rule could inspect and found nothing: no
+/// tools, or only bare-name stubs (no description, no schema -- e.g. a registry
+/// fallback naming the console script). Such a scan has a zero penalty, so
+/// scoring it would publish an unearned perfect 100. Findings are evidence, so
+/// a scan that has any is always scored.
+fn is_unscored(doc: &FindingsV2) -> bool {
+    doc.findings.is_empty()
+        && doc
+            .tools
+            .iter()
+            .all(|t| t.description.is_none() && t.parameters.is_none())
+}
+
 /// Convert one v2 document into a leaderboard row.
 fn row_from(doc: FindingsV2) -> Row {
     // Score from the actual findings, not the producer's self-reported summary:
@@ -211,6 +224,7 @@ pub fn build(dir: &Path, now: OffsetDateTime) -> Result<Leaderboard> {
     // order.
     let mut by_pkg: BTreeMap<String, Row> = BTreeMap::new();
     let mut bad = 0_usize;
+    let mut unscored = 0_usize;
     for entry in entries {
         let entry = entry?;
         let path = entry.path();
@@ -230,6 +244,16 @@ pub fn build(dir: &Path, now: OffsetDateTime) -> Result<Leaderboard> {
             continue;
         }
         match parse_one(&path) {
+            // Dropped before precedence: an empty sandbox capture must not
+            // displace an inspectable registry scan of the same package.
+            Ok(doc) if is_unscored(&doc) => {
+                tracing::warn!(
+                    handle = %doc.server.handle,
+                    tools = doc.tools.len(),
+                    "unscored: no inspectable tool surface and no findings",
+                );
+                unscored += 1;
+            }
             Ok(doc) => {
                 let row = row_from(doc);
                 let key = package_key(&row.handle).to_string();
@@ -269,8 +293,13 @@ pub fn build(dir: &Path, now: OffsetDateTime) -> Result<Leaderboard> {
         // successful empty board. When files were present but every one failed
         // to parse, say so — silently publishing an empty leaderboard would
         // wipe the live board and look like "every server unlisted".
-        return Err(if bad == 0 {
+        return Err(if bad == 0 && unscored == 0 {
             anyhow!("no *.findings.v2.json files in {}", dir.display())
+        } else if bad == 0 {
+            anyhow!(
+                "no scorable *.findings.v2.json files in {} ({unscored} unscored: no inspectable tool surface)",
+                dir.display()
+            )
         } else {
             anyhow!(
                 "no parseable *.findings.v2.json files in {} ({bad} skipped as malformed)",

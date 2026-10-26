@@ -9,6 +9,21 @@ own changelogs in their own repos.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Leaderboard: scans with nothing to inspect no longer score a perfect
+  100.** A findings document with no findings and no inspectable tool
+  surface (zero tools, or only bare-name stubs with neither description
+  nor schema) is now unscored and left off the board, instead of earning
+  a zero-penalty 100. `pypi:mcp-atlassian@0.21.1` sat on the live board
+  at 100 with `tool_count: 0`: it advertises no tools until configured.
+  Unscored scans drop out before source precedence, so an empty sandbox
+  capture can no longer displace an inspectable registry scan of the same
+  package. Documents with findings are always scored. A run where every
+  document is unscored errors instead of publishing an empty board.
+
 ## [v0.2.1] — 2026-05-19
 
 ### Fixed

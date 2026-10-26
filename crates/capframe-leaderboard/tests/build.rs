@@ -68,7 +68,7 @@ fn rows_carry_identity_through() {
         .iter()
         .find(|r| r.handle == "npm:@safe/good-server@1.0.0")
         .unwrap();
-    assert_eq!(good.tool_count, 0);
+    assert_eq!(good.tool_count, 1);
 }
 
 #[test]
@@ -86,6 +86,7 @@ fn ties_break_by_handle_ascending() {
                 "scanned_at":"2026-05-29T18:00:00Z",
                 "scanner":{{"name":"x","version":"0.0.0"}},
                 "server":{{"handle":"{handle}","kind":"mcp_server","source":"registry"}},
+                "tools":[{{"name":"get_time","description":"Return the current time."}}],
                 "findings":[],
                 "summary":{{"total":0,"by_severity":{{"info":0,"low":0,"medium":0,"high":0,"critical":0}}}}
             }}"#,
@@ -178,6 +179,7 @@ fn duplicate_handles_collapse_to_newest_scan() {
                 "scanned_at":"{scanned_at}",
                 "scanner":{{"name":"x","version":"0.0.0"}},
                 "server":{{"handle":"npm:@dup/server@1.0.0","kind":"mcp_server","source":"{source}"}},
+                "tools":[{{"name":"get_time","description":"Return the current time."}}],
                 "findings":{findings},
                 "summary":{{"total":0,"by_severity":{sev}}}
             }}"#,
@@ -230,6 +232,7 @@ fn duplicate_package_different_versions_collapse_to_newest() {
                 "scanned_at":"{scanned_at}",
                 "scanner":{{"name":"x","version":"0.0.0"}},
                 "server":{{"handle":"{handle}","kind":"mcp_server","source":"{source}"}},
+                "tools":[{{"name":"get_time","description":"Return the current time."}}],
                 "findings":{findings},
                 "summary":{{"total":0,"by_severity":{{"info":0,"low":0,"medium":0,"high":0,"critical":0}}}}
             }}"#,
@@ -288,4 +291,167 @@ fn to_json_roundtrips_via_serde() {
     assert_eq!(parsed["schema_version"], "capframe.leaderboard.v1");
     assert!(parsed["rows"].is_array());
     assert_eq!(parsed["weights"]["critical"], 10);
+}
+
+/// Write a v2 doc with explicit `tools` and `findings` JSON.
+fn write_doc(
+    dir: &std::path::Path,
+    slug: &str,
+    handle: &str,
+    scanned_at: &str,
+    source: &str,
+    tools: &str,
+    findings: &str,
+) {
+    let body = format!(
+        r#"{{
+            "schema_version":"capframe.findings.v2",
+            "scan_id":"00000000-0000-0000-0000-000000000000",
+            "scanned_at":"{scanned_at}",
+            "scanner":{{"name":"x","version":"0.0.0"}},
+            "server":{{"handle":"{handle}","kind":"mcp_server","source":"{source}"}},
+            "tools":{tools},
+            "findings":{findings},
+            "summary":{{"total":0,"by_severity":{{"info":0,"low":0,"medium":0,"high":0,"critical":0}}}}
+        }}"#,
+    );
+    fs::write(dir.join(format!("{slug}.findings.v2.json")), body).unwrap();
+}
+
+const REAL_TOOL: &str = r#"[{"name":"get_time","description":"Return the current time."}]"#;
+const MEDIUM: &str =
+    r#"[{"id":"f1","severity":"medium","category":"unconstrained_input","title":"t"}]"#;
+
+#[test]
+fn zero_tool_clean_scan_is_unscored_not_perfect() {
+    // pypi:mcp-atlassian@0.21.1 advertises no tools until configured; its
+    // sandbox capture had tools:[] + findings:[] and sat on the live board at a
+    // perfect 100. Nothing inspected is not the same as clean.
+    let dir = TempDir::new().unwrap();
+    write_doc(
+        dir.path(),
+        "real",
+        "npm:real@1.0.0",
+        "2026-05-29T18:00:00Z",
+        "sandbox",
+        REAL_TOOL,
+        "[]",
+    );
+    write_doc(
+        dir.path(),
+        "atl",
+        "pypi:mcp-atlassian@0.21.1",
+        "2026-05-29T18:00:00Z",
+        "sandbox",
+        "[]",
+        "[]",
+    );
+    let board = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap();
+    assert_eq!(board.total_scanned, 1);
+    assert!(board
+        .rows
+        .iter()
+        .all(|r| r.handle != "pypi:mcp-atlassian@0.21.1"));
+}
+
+#[test]
+fn stub_only_clean_scan_is_unscored_not_perfect() {
+    // The registry fallback for the same package: one tool named after its
+    // console script, no description, no schema -- nothing a rule can read.
+    let dir = TempDir::new().unwrap();
+    write_doc(
+        dir.path(),
+        "real",
+        "npm:real@1.0.0",
+        "2026-05-29T18:00:00Z",
+        "registry",
+        REAL_TOOL,
+        "[]",
+    );
+    write_doc(
+        dir.path(),
+        "atl",
+        "pypi:mcp-atlassian@0.21.1",
+        "2026-05-29T18:00:00Z",
+        "registry",
+        r#"[{"name":"mcp-atlassian"}]"#,
+        "[]",
+    );
+    let board = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap();
+    assert_eq!(board.total_scanned, 1);
+    assert!(board
+        .rows
+        .iter()
+        .all(|r| r.handle != "pypi:mcp-atlassian@0.21.1"));
+}
+
+#[test]
+fn empty_sandbox_scan_does_not_mask_an_inspectable_registry_scan() {
+    // Sandbox outranks registry, so an empty sandbox capture used to replace a
+    // real registry surface with a perfect score. Unscored scans must drop out
+    // before precedence is applied.
+    let dir = TempDir::new().unwrap();
+    write_doc(
+        dir.path(),
+        "reg",
+        "npm:pkg@1.0.0",
+        "2026-05-29T18:00:00Z",
+        "registry",
+        REAL_TOOL,
+        MEDIUM,
+    );
+    write_doc(
+        dir.path(),
+        "sbx",
+        "npm:pkg@1.0.0",
+        "2026-05-30T18:00:00Z",
+        "sandbox",
+        "[]",
+        "[]",
+    );
+    let board = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap();
+    assert_eq!(board.total_scanned, 1);
+    let row = &board.rows[0];
+    assert_eq!(
+        row.counts.medium, 1,
+        "the inspectable registry scan must win"
+    );
+    assert_eq!(row.score, SCORE_MAX - 2);
+}
+
+#[test]
+fn tool_less_scan_with_findings_is_still_scored() {
+    // Findings are evidence: a doc that ships a finding is scored even if it
+    // lists no tools. Only "nothing inspected AND nothing found" is unscored.
+    let dir = TempDir::new().unwrap();
+    write_doc(
+        dir.path(),
+        "f",
+        "npm:pkg@1.0.0",
+        "2026-05-29T18:00:00Z",
+        "registry",
+        "[]",
+        MEDIUM,
+    );
+    let board = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap();
+    assert_eq!(board.rows[0].score, SCORE_MAX - 2);
+}
+
+#[test]
+fn all_unscored_dir_errors_instead_of_publishing_empty() {
+    let dir = TempDir::new().unwrap();
+    write_doc(
+        dir.path(),
+        "a",
+        "npm:a@1.0.0",
+        "2026-05-29T18:00:00Z",
+        "sandbox",
+        "[]",
+        "[]",
+    );
+    let err = build(dir.path(), OffsetDateTime::UNIX_EPOCH).unwrap_err();
+    assert!(
+        err.to_string().contains("unscored"),
+        "an all-unscored run must say so, not claim the dir was empty, got: {err}"
+    );
 }
